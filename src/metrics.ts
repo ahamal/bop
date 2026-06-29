@@ -16,8 +16,12 @@ export interface Metrics {
   headRoll: number; // mirrored
   // Torso angle (degrees, relative to neutral; mirrored to match the head).
   torsoTilt: number;
+  /** Head closeness vs neutral, from the face matrix Z. >1 closer, <1 farther. */
+  headCloseness: number;
+  /** Torso closeness vs neutral, from shoulder width. >1 closer. */
+  torsoCloseness: number;
   /**
-   * Head closeness minus torso closeness, as ratios (≈0 at neutral). Negative =
+   * headToTorsoDepth = headCloseness − torsoCloseness (≈0 at neutral). Negative =
    * head sits farther back than the torso — i.e. retracted, as in a chin tuck.
    * Small-magnitude, so the detector filters it before thresholding. Only
    * meaningful when bodyTracked.
@@ -58,6 +62,8 @@ export function computeMetrics(
     headYaw: MIRROR_SIGN * relHead.yaw,
     headRoll: MIRROR_SIGN * relHead.roll,
     torsoTilt,
+    headCloseness,
+    torsoCloseness,
     headToTorsoDepth,
     bodyTracked,
   };

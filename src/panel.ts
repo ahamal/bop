@@ -26,8 +26,12 @@ const METERS: readonly MeterSpec[] = [
   { key: "pitch", label: "Pitch — look U/D", center: 0, range: 30, format: deg },
   { key: "roll", label: "Roll — tilt L/R", center: 0, range: 30, format: deg },
   { key: "torso", label: "Torso tilt", center: 0, range: 25, format: deg },
-  { key: "depth", label: "Tuck depth", center: 0, range: 0.08, format: ratio },
   { key: "lean", label: "Lean (in/out)", center: 1, range: 0.4, format: pct },
+  // Tuck diagnostics, grouped at the end: tuck depth = head depth − shoulder depth.
+  // (Head depth is the same value as Lean, shown raw for the subtraction.)
+  { key: "headDepth", label: "Head depth", center: 1, range: 0.4, format: ratio },
+  { key: "shoulderDepth", label: "Shoulder depth", center: 1, range: 0.4, format: ratio },
+  { key: "depth", label: "Tuck depth", center: 0, range: 0.08, format: ratio },
 ];
 
 const STATE_LABELS: Record<GestureName, string> = {
@@ -110,14 +114,16 @@ export class IndicatorPanel {
     return section;
   }
 
-  /** Update the continuous meters. lean = head closeness; depth = filtered. */
-  setMetrics(m: Metrics, lean: number, depthFiltered: number): void {
+  /** Update the continuous meters. depthFiltered = the value tuck thresholds. */
+  setMetrics(m: Metrics, depthFiltered: number): void {
     this.meter("yaw", m.headYaw);
     this.meter("pitch", m.headPitch);
     this.meter("roll", m.headRoll);
     this.meter("torso", m.torsoTilt);
+    this.meter("lean", m.headCloseness);
+    this.meter("headDepth", m.headCloseness);
+    this.meter("shoulderDepth", m.torsoCloseness);
     this.meter("depth", depthFiltered);
-    this.meter("lean", lean);
   }
 
   private meter(key: string, value: number): void {

@@ -139,7 +139,7 @@ async function start(): Promise<void> {
             logGesture(GESTURE_LABEL[ev.name]);
           }
         }
-        panel.setMetrics(m, zoom, detector.depthFiltered);
+        panel.setMetrics(m, detector.depthFiltered);
         panel.setStates(detector.snapshot());
       }
       requestAnimationFrame(loop);
