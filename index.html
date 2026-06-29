@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>bop — head tracking</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>bop · head tracking</h1>
+      <p class="hint">Look L/R · up/down · tilt L/R · tuck your chin.</p>
+
+      <div class="panels">
+        <div class="stage">
+          <video id="video" autoplay playsinline muted></video>
+          <canvas id="overlay"></canvas>
+          <div id="status" class="status">Click start to enable camera</div>
+        </div>
+        <div class="stage">
+          <canvas id="avatar"></canvas>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="start">Start camera</button>
+        <button id="recenter" disabled>Recenter</button>
+        <span id="fps" class="fps"></span>
+      </div>
+
+      <div id="indicators"></div>
+
+      <div id="gestures" class="gestures"></div>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
