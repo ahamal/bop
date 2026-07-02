@@ -95,14 +95,14 @@ const CONFIGS: Record<GestureName, GestureConfig> = {
   // A tilt is roll without a turn: a big yaw fakes roll, so guard on yaw.
   tiltLeft: {
     axis: "roll",
-    signal: (m) => -m.headRoll,
+    signal: (m) => m.headRoll,
     enter: 12,
     exit: 6,
     guards: { yaw: 15 },
   },
   tiltRight: {
     axis: "roll",
-    signal: (m) => m.headRoll,
+    signal: (m) => -m.headRoll,
     enter: 12,
     exit: 6,
     guards: { yaw: 15 },
@@ -121,6 +121,14 @@ const CONFIGS: Record<GestureName, GestureConfig> = {
     guards: { yaw: 12, pitch: 12, roll: 10 },
   },
 };
+
+/**
+ * Enter threshold per gesture — used to normalize signal strength across axes
+ * (degrees vs depth ratio) when deciding the single dominant state (sequence.ts).
+ */
+export const GESTURE_ENTER: Record<GestureName, number> = Object.fromEntries(
+  GESTURE_NAMES.map((n) => [n, CONFIGS[n].enter]),
+) as Record<GestureName, number>;
 
 function guardsSatisfied(cfg: GestureConfig, m: Metrics): boolean {
   const g = cfg.guards;

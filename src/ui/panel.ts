@@ -2,11 +2,16 @@
 //   Metrics: continuous signals, each on a center-origin meter that fills left
 //            or right of zero so direction is visible at a glance.
 //   States:  discrete movement states, each a lit dot + how long it's been held.
-// It's data-driven (METERS + the gesture snapshot) so every row looks uniform
-// and adding a signal is a one-line change, not new bespoke markup.
+// It's data-driven (METERS + the gesture snapshot) so every row looks uniform.
+// Styling is Tailwind utilities applied here (no stylesheet); theme tokens
+// (bg-panel, text-muted, bg-accent) keep it on the app's light/dark palette.
 
-import type { Metrics } from "./metrics.ts";
-import type { GestureState, GestureName } from "./gestures.ts";
+import type { Metrics } from "../tracking/metrics.ts";
+import type { GestureState, GestureName } from "../tracking/gestures.ts";
+
+// Shared class strings for the repeated card/grid shapes.
+const GRID = "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2";
+const CARD = "rounded-md bg-panel";
 
 interface MeterSpec {
   key: string;
@@ -76,17 +81,32 @@ export class IndicatorPanel {
   }
 
   private buildMeters(): HTMLElement {
-    const section = el("section", "panel");
-    section.append(el("h2", "panel-title", "Metrics"));
-    const grid = el("div", "meters");
+    const section = el("section", "mt-5");
+    section.append(
+      el("h2", "mb-2.5 text-xs font-semibold uppercase tracking-wider text-muted", "Metrics"),
+    );
+    const grid = el("div", GRID);
     for (const spec of METERS) {
-      const row = el("div", "meter");
-      const label = el("span", "meter-label", spec.label);
-      const track = el("div", "meter-track");
-      track.append(el("div", "meter-center"));
-      const fill = el("div", "meter-fill") as HTMLDivElement;
+      const row = el(
+        "div",
+        `${CARD} grid grid-cols-[1fr_auto] items-center gap-x-2 gap-y-1.5 px-2.5 py-2`,
+      );
+      const label = el("span", "text-[0.72rem] text-muted", spec.label);
+      const track = el(
+        "div",
+        "relative col-span-full h-[3px] overflow-hidden rounded-full bg-black/10 dark:bg-white/10",
+      );
+      track.append(el("div", "absolute inset-y-0 left-1/2 w-px bg-black/20 dark:bg-white/20"));
+      const fill = el(
+        "div",
+        "absolute inset-y-0 rounded-full bg-accent transition-[width,left,right] duration-[60ms] ease-linear",
+      ) as HTMLDivElement;
       track.append(fill);
-      const val = el("span", "meter-val", spec.format(spec.center)) as HTMLSpanElement;
+      const val = el(
+        "span",
+        "text-right text-[0.8rem] tabular-nums",
+        spec.format(spec.center),
+      ) as HTMLSpanElement;
       // Order matters: label, value, then the full-width track — so the track
       // lands on its own row below and the value sits top-right (grid auto-flow).
       row.append(label, val, track);
@@ -98,14 +118,19 @@ export class IndicatorPanel {
   }
 
   private buildStates(): HTMLElement {
-    const section = el("section", "panel");
-    section.append(el("h2", "panel-title", "States"));
-    const grid = el("div", "states");
+    const section = el("section", "mt-5");
+    section.append(
+      el("h2", "mb-2.5 text-xs font-semibold uppercase tracking-wider text-muted", "States"),
+    );
+    const grid = el("div", GRID);
     for (const name of Object.keys(STATE_LABELS) as GestureName[]) {
-      const card = el("div", "state");
-      const dot = el("span", "state-dot") as HTMLSpanElement;
-      const label = el("span", "state-name", STATE_LABELS[name]);
-      const dur = el("span", "state-dur", "—") as HTMLSpanElement;
+      const card = el("div", `${CARD} flex items-center gap-2 px-3 py-2 text-sm`);
+      const dot = el(
+        "span",
+        "h-2.5 w-2.5 flex-none rounded-full bg-black/15 transition-[background-color,box-shadow] duration-[80ms] ease-linear dark:bg-white/15",
+      ) as HTMLSpanElement;
+      const label = el("span", "text-muted", STATE_LABELS[name]);
+      const dur = el("span", "ml-auto tabular-nums text-muted", "—") as HTMLSpanElement;
       card.append(dot, label, dur);
       grid.append(card);
       this.states.set(name, { dot, dur });
@@ -148,9 +173,15 @@ export class IndicatorPanel {
     for (const st of snapshot) {
       const els = this.states.get(st.name);
       if (!els) continue;
-      els.dot.classList.toggle("active", st.active);
-      els.dur.textContent = st.active ? `${(st.heldMs / 1000).toFixed(1)}s` : "—";
-      els.dur.classList.toggle("active", st.active);
+      const on = st.active;
+      // Toggle mutually-exclusive utilities so there's never a cascade tie.
+      els.dot.classList.toggle("bg-accent", on);
+      els.dot.classList.toggle("shadow-[0_0_8px_var(--color-accent)]", on);
+      els.dot.classList.toggle("bg-black/15", !on);
+      els.dot.classList.toggle("dark:bg-white/15", !on);
+      els.dur.textContent = on ? `${(st.heldMs / 1000).toFixed(1)}s` : "—";
+      els.dur.classList.toggle("text-accent", on);
+      els.dur.classList.toggle("text-muted", !on);
     }
   }
 }

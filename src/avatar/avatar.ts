@@ -4,9 +4,9 @@
 // on their own and visibly detach.
 
 import * as THREE from "three";
-import type { HeadPose } from "./pose.ts";
-import type { BodyPose } from "./bodyTracker.ts";
-import { MIRROR_SIGN } from "./mirror.ts";
+import type { HeadPose } from "../tracking/pose.ts";
+import type { BodyPose } from "../tracking/bodyTracker.ts";
+import { MIRROR_SIGN } from "../tracking/mirror.ts";
 
 const DEG2RAD = Math.PI / 180;
 
@@ -31,12 +31,14 @@ export class Avatar {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
   private camera: THREE.PerspectiveCamera;
-  private headPivot = new THREE.Group();
+  // Protected so subclasses (e.g. AbstractAvatar) can add their own geometry to
+  // these groups; all the pose-driving machinery below stays shared.
+  protected headPivot = new THREE.Group();
   // swayGroup translates side-to-side; torsoGroup (inside it) is what tilts.
   // The head hangs off swayGroup directly, so it follows sway but a shoulder
   // shrug (which only tilts the torso) doesn't rotate the head.
-  private bodyGroup = new THREE.Group(); // sway
-  private torsoGroup = new THREE.Group(); // tilt (shoulders + arms)
+  protected bodyGroup = new THREE.Group(); // sway
+  protected torsoGroup = new THREE.Group(); // tilt (shoulders + arms)
   // Resting reading captured at calibration, so neutral = centered/straight.
   private bodyNeutral = { tilt: 0, sway: 0, centerY: 0, width: 0 };
   private canvas: HTMLCanvasElement;
@@ -57,6 +59,10 @@ export class Avatar {
   private curZoom = 1;
   private targetZoom = 1;
 
+  private resizeHandler = (): void => this.resize();
+  private rafId = 0;
+  private disposed = false;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({
@@ -64,7 +70,9 @@ export class Avatar {
       antialias: true,
       alpha: true,
     });
-    this.scene.background = new THREE.Color(0x0d1117);
+    // Transparent background so the avatar composites over whatever's behind it
+    // (a dark frame on the dev page, the page itself on the play screen).
+    this.renderer.setClearAlpha(0);
 
     this.camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
     this.camera.position.set(0, 0.4, 7);
@@ -87,11 +95,19 @@ export class Avatar {
     this.scene.add(this.bodyGroup);
 
     this.resize();
-    window.addEventListener("resize", () => this.resize());
+    window.addEventListener("resize", this.resizeHandler);
     this.renderLoop();
   }
 
-  private buildBody(): void {
+  /** Stop the render loop and release GL/listeners. Call when unmounting. */
+  dispose(): void {
+    this.disposed = true;
+    cancelAnimationFrame(this.rafId);
+    window.removeEventListener("resize", this.resizeHandler);
+    this.renderer.dispose();
+  }
+
+  protected buildBody(): void {
     const shirt = new THREE.MeshStandardMaterial({ color: SHIRT, roughness: 0.7 });
 
     // Pivot the torso at the shoulder line; meshes are positioned relative to it
@@ -118,7 +134,7 @@ export class Avatar {
     this.headPivot.position.set(0, -0.85, 0);
   }
 
-  private buildHead(): void {
+  protected buildHead(): void {
     const skin = new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.85 });
     const hair = new THREE.MeshStandardMaterial({ color: HAIR, roughness: 0.9 });
     const dark = new THREE.MeshStandardMaterial({ color: 0x1b1f27 });
@@ -219,6 +235,7 @@ export class Avatar {
   }
 
   private renderLoop = (): void => {
+    if (this.disposed) return;
     // Smooth toward target for a less jittery feel.
     const k = 0.35;
     this.cur.x += (this.target.x - this.cur.x) * k;
@@ -250,6 +267,6 @@ export class Avatar {
     this.headPivot.scale.setScalar(this.curZoom);
 
     this.renderer.render(this.scene, this.camera);
-    requestAnimationFrame(this.renderLoop);
+    this.rafId = requestAnimationFrame(this.renderLoop);
   };
 }

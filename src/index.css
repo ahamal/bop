@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+/* Dark mode is driven by a `.dark` class on <html> (toggled from settings), not
+   the prefers-color-scheme media query — so the manual toggle works. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Palette as Tailwind theme tokens → utilities (bg-bg, text-text, bg-accent,
+   text-muted, …). Values here are the LIGHT theme; .dark overrides the vars at
+   runtime (colors stay var() references, so the swap takes effect). */
+@theme {
+  --color-bg: var(--color-slate-50);
+  --color-panel: var(--color-white);
+  --color-accent: var(--color-emerald-400);
+  --color-text: var(--color-slate-800);
+  --color-muted: var(--color-slate-500);
+}
+
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+  --color-bg: var(--color-slate-900);
+  --color-panel: var(--color-slate-800);
+  --color-text: var(--color-slate-200);
+  --color-muted: var(--color-slate-400);
+}
+
+@layer base {
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+  }
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+}

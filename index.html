@@ -3,36 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>bop — head tracking</title>
-    <link rel="stylesheet" href="/src/style.css" />
+    <title>bop</title>
+    <script>
+      // Apply the saved theme before first paint to avoid a light/dark flash.
+      // Mirrors the defaults in src/settings.ts (theme: "system").
+      try {
+        var s = JSON.parse(localStorage.getItem("bop:settings") || "{}");
+        var t = s.theme || "system";
+        var dark =
+          t === "dark" ||
+          (t !== "light" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (dark) document.documentElement.classList.add("dark");
+      } catch (e) {}
+    </script>
   </head>
   <body>
-    <main>
-      <h1>bop · head tracking</h1>
-      <p class="hint">Look L/R · up/down · tilt L/R · tuck your chin.</p>
-
-      <div class="panels">
-        <div class="stage">
-          <video id="video" autoplay playsinline muted></video>
-          <canvas id="overlay"></canvas>
-          <div id="status" class="status">Click start to enable camera</div>
-        </div>
-        <div class="stage">
-          <canvas id="avatar"></canvas>
-        </div>
-      </div>
-
-      <div class="controls">
-        <button id="start">Start camera</button>
-        <button id="recenter" disabled>Recenter</button>
-        <span id="fps" class="fps"></span>
-      </div>
-
-      <div id="indicators"></div>
-
-      <div id="gestures" class="gestures"></div>
-    </main>
-
-    <script type="module" src="/src/main.ts"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
