@@ -15,7 +15,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as Switch from "@radix-ui/react-switch";
-import { VideoCameraIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import { VideoCameraIcon, ExclamationTriangleIcon, ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { SettingsMenu } from "./SettingsMenu.tsx";
 import { TrackingSession, type FrameResult } from "../tracking/session.ts";
 import { AbstractAvatar } from "../avatar/AbstractAvatar.ts";
@@ -33,6 +33,8 @@ const HOLD_MS = 1000;
 const SLIDE_MS = 1000;
 // The crossfade split: camera fades over [0, SPLIT]; dots→mesh over [SPLIT, 1].
 const SPLIT = 0.33;
+// Cap per-frame elapsed time so a background-tab gap can't jump a hold timer.
+const MAX_DT = 100;
 
 // Timer ring geometry + how many discrete ticks it steps through (clock-like).
 const RING_R = 26;
@@ -53,7 +55,7 @@ const BTN =
 
 type Phase = "idle" | "live";
 
-export function PlayScreen() {
+export function PlayScreen({ onExit }: { onExit: () => void }) {
   const [shown, setShown] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [status, setStatus] = useState("");
@@ -186,12 +188,18 @@ export function PlayScreen() {
   const beginGame = (): void => {
     if (startedRef.current) return;
     startedRef.current = true;
+    restartGame();
+    setStarted(true);
+  };
+
+  // Fresh player + HUD bookkeeping — used at first begin and by "Again".
+  const restartGame = (): void => {
     playerRef.current = new StackPlayer(NECK_ROUTINE);
     lastPlayTs.current = 0;
     hudIndex.current = -1;
     hudDone.current = false;
     recenterPending.current = false;
-    setStarted(true);
+    setHud({ index: -1, done: false });
   };
 
   // Advance the routine each frame while playing: the timer ring updates via a
@@ -200,12 +208,14 @@ export function PlayScreen() {
     const player = playerRef.current;
     if (!startedRef.current || !player) return;
     const now = performance.now();
-    const dt = lastPlayTs.current ? now - lastPlayTs.current : 0;
+    const dt = Math.min(MAX_DT, lastPlayTs.current ? now - lastPlayTs.current : 0);
     lastPlayTs.current = now;
     const snap = player.update(f, dt);
 
     // The player asks to recenter once it's been still; do it, then confirm.
-    if (snap.requestRecenter && !recenterPending.current) {
+    // (It re-asks after a timeout if the recenter never lands, so honor every
+    // request — recentering twice is harmless.)
+    if (snap.requestRecenter) {
       recenterPending.current = true;
       sessionRef.current?.recenter();
     }
@@ -270,7 +280,12 @@ export function PlayScreen() {
     }
   };
 
-  const recenter = (): void => sessionRef.current?.recenter();
+  // Manual recenter. Mid-exercise it moves the neutral baseline, so progress
+  // earned against the old one is void — restart the current card.
+  const recenter = (): void => {
+    if (startedRef.current) playerRef.current?.resetCurrent();
+    sessionRef.current?.recenter();
+  };
 
   // Staged crossfade opacities from morph.
   const camOpacity = 1 - Math.min(morph, SPLIT) / SPLIT;
@@ -291,6 +306,14 @@ export function PlayScreen() {
         <SettingsMenu />
       </div>
 
+      {/* Back to home — the unmount effect stops the session/camera. */}
+      <button
+        onClick={onExit}
+        aria-label="Back to home"
+        className="absolute left-4 top-4 rounded-full p-2 text-muted transition hover:bg-black/5 hover:text-text dark:hover:bg-white/10"
+      >
+        <ArrowLeftIcon className="h-5 w-5" />
+      </button>
 
       {/* Stage: camera box, dots overlay, and mesh are three stacked layers whose
           opacities the slider crossfades. The video stays mounted (even faded)
@@ -453,9 +476,19 @@ export function PlayScreen() {
               <div className="flex w-full items-start justify-center" style={{ height: `${CARD_STEP}rem` }}>
                 <div
                   style={{ height: `${ACTIVE_H}rem` }}
-                  className="flex w-full max-w-xs items-center justify-center rounded-2xl bg-panel px-6 shadow-lg ring-1 ring-black/5 dark:ring-white/10"
+                  className="flex w-full max-w-xs flex-col items-center justify-center gap-3 rounded-2xl bg-panel px-6 shadow-lg ring-1 ring-black/5 dark:ring-white/10"
                 >
                   <p className="text-base font-medium text-text">All done — nice work.</p>
+                  {hud.done && (
+                    <div className="flex items-center gap-3">
+                      <button onClick={restartGame} className={BTN}>
+                        Again
+                      </button>
+                      <button onClick={onExit} className={BTN}>
+                        Home
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -463,8 +496,8 @@ export function PlayScreen() {
         )}
       </div>
 
-      {/* Recenter — below the cards during play. */}
-      {started && (
+      {/* Recenter — below the cards during play (gone once the routine is done). */}
+      {started && !hud.done && (
         <button
           onClick={recenter}
           className="rounded-full bg-panel px-4 py-2 text-xs font-semibold uppercase tracking-wide text-text shadow outline-none ring-1 ring-black/10 transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-accent dark:ring-white/10"

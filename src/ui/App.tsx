@@ -25,6 +25,6 @@ export function App() {
   // The play screen is app state (not a bookmarkable route); only #dev routes.
   const [playing, setPlaying] = useState(false);
   if (current === "dev") return <DevScreen />;
-  if (playing) return <PlayScreen />;
+  if (playing) return <PlayScreen onExit={() => setPlaying(false)} />;
   return <GameScreen onBegin={() => setPlaying(true)} />;
 }

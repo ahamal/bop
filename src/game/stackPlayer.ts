@@ -28,9 +28,16 @@ export interface StackSnapshot {
 
 // "Hold still" gate.
 const READY_STILL_MS = 1800;
-const STILL_THRESH = 2.0; // deg/frame (yaw+pitch+roll) below this counts as still
+const STILL_THRESH_DPS = 60; // deg/sec (yaw+pitch+roll) below this counts as still
 // "Relax" gate: how long to stay near neutral before we recenter and move on.
 const RELAX_MS = 1200;
+// If a requested recenter never lands (host's onCalibrated doesn't fire — e.g.
+// the face was lost mid-recenter), re-request after this long so the step can't
+// stall forever.
+const RECENTER_RETRY_MS = 3000;
+// Holds bleed while the pose is dropped, so a long hold can't be banked from
+// tiny fragments; half-speed so a brief wobble doesn't erase real work.
+const HOLD_DECAY = 0.5;
 
 export class StackPlayer {
   private index = 0;
@@ -44,6 +51,7 @@ export class StackPlayer {
   private stillMs = 0;
   private prevAngles: { yaw: number; pitch: number; roll: number } | null = null;
   private recenterRequested = false;
+  private recenterWaitMs = 0;
 
   constructor(private routine: Step[]) {}
 
@@ -58,6 +66,19 @@ export class StackPlayer {
     if (k === "still" || k === "relax") this.advance();
   }
 
+  /** Host recentered manually mid-step (new neutral baseline) → the progress
+   * earned against the old baseline no longer means anything; start the current
+   * step over without advancing. */
+  resetCurrent(): void {
+    if (this.done) return;
+    this.held = 0;
+    this.checkpoint = 0;
+    this.passes = 0;
+    this.dir = 1;
+    this.stillMs = 0;
+    this.prevAngles = null;
+  }
+
   update(f: FrameResult, dt: number): StackSnapshot {
     if (this.done) return this.snapshot(false, false);
     const step = this.routine[this.index];
@@ -69,28 +90,50 @@ export class StackPlayer {
   // Wait until the head returns near neutral for a beat, then recenter (re-zero)
   // before the next movement. Advances when the host confirms via recentered().
   private updateRelax(f: FrameResult, dt: number): StackSnapshot {
+    const step = this.routine[this.index];
     const neutral = f.dominant === "neutral";
     this.held = neutral ? this.held + dt : 0; // must be continuously neutral
-    let requestRecenter = false;
-    if (this.held >= RELAX_MS && !this.recenterRequested) {
-      this.recenterRequested = true;
-      requestRecenter = true;
+    if (this.held >= RELAX_MS) {
+      // Only re-zero when the step asks for it (before a ROM hold); between
+      // identical reps the baseline hasn't drifted, so just move on.
+      if (step.kind === "relax" && !step.recenter) {
+        this.advance();
+        return this.snapshot(true, false);
+      }
+      return this.snapshot(neutral, this.requestRecenterOnce(dt));
     }
-    return this.snapshot(neutral, requestRecenter);
+    this.recenterWaitMs = 0;
+    return this.snapshot(neutral, false);
+  }
+
+  /** One-shot recenter request, re-armed if the host never confirms in time. */
+  private requestRecenterOnce(dt: number): boolean {
+    if (!this.recenterRequested) {
+      this.recenterRequested = true;
+      this.recenterWaitMs = 0;
+      return true;
+    }
+    this.recenterWaitMs += dt;
+    if (this.recenterWaitMs >= RECENTER_RETRY_MS) {
+      this.recenterWaitMs = 0;
+      return true;
+    }
+    return false;
   }
 
   private updateStill(f: FrameResult, dt: number): StackSnapshot {
     const a = { yaw: f.metrics.headYaw, pitch: f.metrics.headPitch, roll: f.metrics.headRoll };
     let requestRecenter = false;
-    if (this.prevAngles) {
+    if (this.prevAngles && dt > 0) {
       const move =
         Math.abs(a.yaw - this.prevAngles.yaw) +
         Math.abs(a.pitch - this.prevAngles.pitch) +
         Math.abs(a.roll - this.prevAngles.roll);
-      this.stillMs = move < STILL_THRESH ? this.stillMs + dt : Math.max(0, this.stillMs - dt * 2);
-      if (this.stillMs >= READY_STILL_MS && !this.recenterRequested) {
-        this.recenterRequested = true;
-        requestRecenter = true; // host recenters, then calls recentered()
+      // Normalize to deg/sec so the gate reads the same at any camera fps.
+      const rate = (move / dt) * 1000;
+      this.stillMs = rate < STILL_THRESH_DPS ? this.stillMs + dt : Math.max(0, this.stillMs - dt * 2);
+      if (this.stillMs >= READY_STILL_MS) {
+        requestRecenter = this.requestRecenterOnce(dt); // host recenters, then calls recentered()
       }
     }
     this.prevAngles = a;
@@ -103,15 +146,20 @@ export class StackPlayer {
     switch (step.kind) {
       case "hold": {
         active = isActive(f.states, step.state);
-        if (active) this.held = Math.min(step.holdMs, this.held + dt);
+        this.held = active
+          ? Math.min(step.holdMs, this.held + dt)
+          : Math.max(0, this.held - dt * HOLD_DECAY);
         if (this.held >= step.holdMs) this.advance();
         break;
       }
       case "roll": {
-        const seq = this.dir === 1 ? step.checkpoints : [...step.checkpoints].reverse();
-        if (f.dominant === seq[this.checkpoint]) this.checkpoint += 1;
+        // Walk the checkpoints forwards or backwards depending on direction —
+        // indexed, so no per-frame array copy.
+        const cps = step.checkpoints;
+        const at = this.dir === 1 ? this.checkpoint : cps.length - 1 - this.checkpoint;
+        if (f.dominant === cps[at]) this.checkpoint += 1;
         active = f.dominant !== "neutral";
-        if (this.checkpoint >= seq.length) {
+        if (this.checkpoint >= cps.length) {
           this.passes += 1;
           this.checkpoint = 0;
           this.dir *= -1;
@@ -132,6 +180,7 @@ export class StackPlayer {
     this.stillMs = 0;
     this.prevAngles = null;
     this.recenterRequested = false;
+    this.recenterWaitMs = 0;
     if (this.index >= this.routine.length) this.done = true;
   }
 

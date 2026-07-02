@@ -10,17 +10,20 @@ export type Step =
   // movements measure from a clean baseline. This is the ONLY step that centers.
   | { kind: "still"; label: string }
   // Return to a neutral head position for a beat (separates consecutive reps).
-  | { kind: "relax"; label: string }
+  // `recenter` re-zeroes neutral afterwards — wanted before a ROM hold, skipped
+  // between identical reps where the baseline hasn't drifted.
+  | { kind: "relax"; label: string; recenter?: boolean }
   // Hold a single gesture; the timer decreases only while it's held.
   | { kind: "hold"; label: string; state: GestureName; holdMs: number }
   // A flowing pass through ordered checkpoints, alternating direction each pass.
   | { kind: "roll"; label: string; checkpoints: GestureName[]; passes: number };
 
-// Each chin tuck is its own card. A "relax" (back to neutral) between every
-// movement doubles as a re-zero — it recenters — so the next movement measures
-// from a clean baseline.
+// Each chin tuck is its own card. Between tuck reps a plain relax just separates
+// them; before each ROM hold the relax also re-zeroes (recenters) so the hold
+// measures from a clean baseline.
 const tuck = (): Step => ({ kind: "hold", label: "Tuck your chin in", state: "tuck", holdMs: 6000 });
 const relax = (): Step => ({ kind: "relax", label: "Relax, back to neutral" });
+const relaxZero = (): Step => ({ kind: "relax", label: "Relax, back to neutral", recenter: true });
 
 export const NECK_ROUTINE: Step[] = [
   { kind: "still", label: "Sit comfortably and hold still" },
@@ -30,20 +33,20 @@ export const NECK_ROUTINE: Step[] = [
   tuck(), relax(),
   tuck(), relax(),
   tuck(), relax(),
-  tuck(), relax(),
+  tuck(), relaxZero(),
   // Range-of-motion holds, each preceded by a relax/re-zero.
   { kind: "hold", label: "Tilt your left ear to your shoulder", state: "tiltLeft", holdMs: 20000 },
-  relax(),
+  relaxZero(),
   { kind: "hold", label: "Tilt your right ear to your shoulder", state: "tiltRight", holdMs: 20000 },
-  relax(),
+  relaxZero(),
   { kind: "hold", label: "Look over your left shoulder", state: "lookLeft", holdMs: 20000 },
-  relax(),
+  relaxZero(),
   { kind: "hold", label: "Look over your right shoulder", state: "lookRight", holdMs: 20000 },
-  relax(),
+  relaxZero(),
   { kind: "hold", label: "Lower your chin to your chest", state: "lookDown", holdMs: 20000 },
-  relax(),
+  relaxZero(),
   { kind: "hold", label: "Gently look up", state: "lookUp", holdMs: 5000 },
-  relax(),
+  relaxZero(),
   // Flowing cooldown.
   {
     kind: "roll",
