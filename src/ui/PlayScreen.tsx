@@ -19,6 +19,8 @@ import { VideoCameraIcon, ExclamationTriangleIcon } from "@heroicons/react/24/ou
 import { SettingsMenu } from "./SettingsMenu.tsx";
 import { TrackingSession, type FrameResult } from "../tracking/session.ts";
 import { AbstractAvatar } from "../avatar/AbstractAvatar.ts";
+import { StackPlayer } from "../game/stackPlayer.ts";
+import { NECK_ROUTINE } from "../game/routine.ts";
 
 const FACE_COLOR = "rgba(52, 211, 153, 0.8)";
 const SHOULDER_LINE = "rgba(255, 180, 80, 0.9)";
@@ -31,6 +33,20 @@ const HOLD_MS = 1000;
 const SLIDE_MS = 1000;
 // The crossfade split: camera fades over [0, SPLIT]; dots→mesh over [SPLIT, 1].
 const SPLIT = 0.33;
+
+// Timer ring geometry + how many discrete ticks it steps through (clock-like).
+const RING_R = 26;
+const RING_SIZE = 64;
+const RING_C = 2 * Math.PI * RING_R;
+const RING_TICKS = 20;
+// Reel: the active card is big; the next card is smaller and expands to big when
+// it becomes active. Exactly two cards show (active + next). All rem.
+const ACTIVE_H = 8.25; // active card height
+const NEXT_H = 4.5; // upcoming card height
+const CARD_GAP = 1; // gap between cards (also room for the shadow)
+const CARD_STEP = ACTIVE_H + CARD_GAP; // reel advances one of these per step
+const REEL_PAD = 1; // viewport padding so the outer shadows aren't clipped
+const REEL_H = 2 * REEL_PAD + ACTIVE_H + CARD_GAP + NEXT_H; // exact 2-card height
 
 const BTN =
   "rounded-full border border-black/15 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-text transition hover:bg-black/5 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent dark:border-white/15 dark:hover:bg-white/10";
@@ -47,6 +63,9 @@ export function PlayScreen() {
   const [on, setOn] = useState(false);
   // The game has begun (via a nod, or the Begin button) → staging chrome clears.
   const [started, setStarted] = useState(false);
+  // Which step is active + whether we're done (discrete state; the reel slides to
+  // this index, and the timer ring on the active card updates via refs).
+  const [hud, setHud] = useState<{ index: number; done: boolean }>({ index: -1, done: false });
   // Set when the camera fails to start (permission denied, no device, etc.).
   const [error, setError] = useState<string | null>(null);
 
@@ -69,6 +88,16 @@ export function PlayScreen() {
   // on the first nod (guarded so it only happens once).
   const nodArmed = useRef(false);
   const startedRef = useRef(false);
+
+  // The routine player + per-frame HUD refs (timer ring updated imperatively).
+  const playerRef = useRef<StackPlayer | null>(null);
+  const lastPlayTs = useRef(0);
+  const ringRef = useRef<SVGCircleElement>(null);
+  const detailRef = useRef<HTMLSpanElement>(null);
+  const hudIndex = useRef(-1);
+  const hudDone = useRef(false);
+  // Between "player asked to recenter" and "recenter landed" (onCalibrated).
+  const recenterPending = useRef(false);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setShown(true));
@@ -157,7 +186,41 @@ export function PlayScreen() {
   const beginGame = (): void => {
     if (startedRef.current) return;
     startedRef.current = true;
+    playerRef.current = new StackPlayer(NECK_ROUTINE);
+    lastPlayTs.current = 0;
+    hudIndex.current = -1;
+    hudDone.current = false;
+    recenterPending.current = false;
     setStarted(true);
+  };
+
+  // Advance the routine each frame while playing: the timer ring updates via a
+  // ref (ticking, not smooth), discrete exercise/phase/done changes via state.
+  const runGame = (f: FrameResult): void => {
+    const player = playerRef.current;
+    if (!startedRef.current || !player) return;
+    const now = performance.now();
+    const dt = lastPlayTs.current ? now - lastPlayTs.current : 0;
+    lastPlayTs.current = now;
+    const snap = player.update(f, dt);
+
+    // The player asks to recenter once it's been still; do it, then confirm.
+    if (snap.requestRecenter && !recenterPending.current) {
+      recenterPending.current = true;
+      sessionRef.current?.recenter();
+    }
+
+    // Ring: quantize to ticks so it steps around like a clock, not a smooth fill.
+    if (ringRef.current) {
+      const stepped = Math.round(snap.progress * RING_TICKS) / RING_TICKS;
+      ringRef.current.style.strokeDashoffset = `${RING_C * (1 - stepped)}`;
+    }
+    if (detailRef.current) detailRef.current.textContent = snap.detail;
+    if (snap.index !== hudIndex.current || snap.done !== hudDone.current) {
+      hudIndex.current = snap.index;
+      hudDone.current = snap.done;
+      setHud({ index: snap.index, done: snap.done });
+    }
   };
 
   const startCamera = async (): Promise<void> => {
@@ -172,17 +235,25 @@ export function PlayScreen() {
     const session = new TrackingSession({
       onStatus: setStatus,
       onCalibrated: (isRecenter) => {
+        if (!isRecenter) return;
         // The pre-slide recenter just landed → flip the switch on and crossfade.
-        if (isRecenter && pendingSlide.current) {
+        if (pendingSlide.current) {
           pendingSlide.current = false;
           setOn(true);
           slideTo(1);
+          return;
+        }
+        // A per-exercise recenter (the "hold still" gate) just landed → start it.
+        if (recenterPending.current) {
+          recenterPending.current = false;
+          playerRef.current?.recentered();
         }
       },
       onFrame: (f) => {
         draw(ctx, overlay, video, f);
         trackStillness(f);
         detectNod(f);
+        runGame(f);
       },
     });
     sessionRef.current = session;
@@ -219,6 +290,7 @@ export function PlayScreen() {
       <div className="absolute right-4 top-4">
         <SettingsMenu />
       </div>
+
 
       {/* Stage: camera box, dots overlay, and mesh are three stacked layers whose
           opacities the slider crossfades. The video stays mounted (even faded)
@@ -278,10 +350,12 @@ export function PlayScreen() {
         )}
       </div>
 
-      {/* Fixed-height controls area so the stage never shifts between phases:
-          content is top-aligned inside a constant height, so appearing/leaving
-          elements (slider, prompt, buttons) don't re-center the column. */}
-      <div className="flex h-36 w-full max-w-md flex-col items-center gap-4">
+      {/* Controls area: fixed height so the stage doesn't jump. Grows into the
+          card reel once the routine starts. */}
+      <div
+        className="relative flex w-full max-w-md flex-col items-center gap-4 transition-[height] duration-500"
+        style={{ height: started ? `${REEL_H}rem` : "9rem" }}
+      >
         {phase === "idle" && !error && (
           <button
             onClick={startCamera}
@@ -319,7 +393,85 @@ export function PlayScreen() {
             Begin
           </button>
         </div>
+
+        {/* Game HUD: a reel of step cards. The active card is centered; finished
+            cards slide up and off, upcoming ones peek below (dimmed). */}
+        {started && (
+          <div className="absolute inset-0 overflow-hidden">
+            <div
+              className="flex w-full flex-col items-center transition-transform duration-500 ease-out"
+              // Bring the active card's top to REEL_PAD; finished cards scroll off.
+              style={{ transform: `translateY(${REEL_PAD - Math.max(0, hud.index) * CARD_STEP}rem)` }}
+            >
+              {NECK_ROUTINE.map((step, i) => {
+                const active = i === hud.index;
+                const past = i < hud.index; // finished — fades out at full size
+                const big = active || past;
+                return (
+                  <div
+                    key={i}
+                    className="flex w-full items-start justify-center"
+                    style={{ height: `${CARD_STEP}rem` }}
+                  >
+                    <div
+                      style={{ height: `${big ? ACTIVE_H : NEXT_H}rem` }}
+                      className={`flex w-full max-w-xs flex-col items-center justify-center gap-2 rounded-2xl bg-panel px-6 py-5 shadow-lg ring-1 ring-black/5 transition-all duration-500 dark:ring-white/10 ${
+                        past ? "opacity-0" : active ? "opacity-100" : "opacity-40"
+                      }`}
+                    >
+                      <p className={`text-center ${active ? "text-base font-medium text-text" : "text-sm text-muted"}`}>
+                        {step.label}
+                      </p>
+                      {active && (
+                        <div className="relative" style={{ height: RING_SIZE, width: RING_SIZE }}>
+                          <svg viewBox="0 0 64 64" className="-rotate-90" style={{ height: RING_SIZE, width: RING_SIZE }}>
+                            <circle cx="32" cy="32" r={RING_R} fill="none" strokeWidth="5" className="stroke-black/10 dark:stroke-white/10" />
+                            <circle
+                              ref={ringRef}
+                              cx="32"
+                              cy="32"
+                              r={RING_R}
+                              fill="none"
+                              strokeWidth="5"
+                              strokeLinecap="round"
+                              className="stroke-text"
+                              strokeDasharray={RING_C}
+                              strokeDashoffset={RING_C}
+                            />
+                          </svg>
+                          <span
+                            ref={detailRef}
+                            className="absolute inset-0 flex items-center justify-center text-sm tabular-nums text-muted"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Completion card at the end of the reel. */}
+              <div className="flex w-full items-start justify-center" style={{ height: `${CARD_STEP}rem` }}>
+                <div
+                  style={{ height: `${ACTIVE_H}rem` }}
+                  className="flex w-full max-w-xs items-center justify-center rounded-2xl bg-panel px-6 shadow-lg ring-1 ring-black/5 dark:ring-white/10"
+                >
+                  <p className="text-base font-medium text-text">All done — nice work.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Recenter — below the cards during play. */}
+      {started && (
+        <button
+          onClick={recenter}
+          className="rounded-full bg-panel px-4 py-2 text-xs font-semibold uppercase tracking-wide text-text shadow outline-none ring-1 ring-black/10 transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-accent dark:ring-white/10"
+        >
+          Recenter
+        </button>
+      )}
     </div>
   );
 }

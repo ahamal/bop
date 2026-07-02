@@ -30,7 +30,7 @@ const clampOffset = (v: number) => Math.max(-MAX_OFFSET, Math.min(MAX_OFFSET, v)
 export class Avatar {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
-  private camera: THREE.PerspectiveCamera;
+  protected camera: THREE.PerspectiveCamera;
   // Protected so subclasses (e.g. AbstractAvatar) can add their own geometry to
   // these groups; all the pose-driving machinery below stays shared.
   protected headPivot = new THREE.Group();
@@ -75,8 +75,7 @@ export class Avatar {
     this.renderer.setClearAlpha(0);
 
     this.camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
-    this.camera.position.set(0, 0.4, 7);
-    this.camera.lookAt(0, 0.2, 0);
+    this.frameCamera();
 
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
     const key = new THREE.DirectionalLight(0xffffff, 0.9);
@@ -105,6 +104,13 @@ export class Avatar {
     cancelAnimationFrame(this.rafId);
     window.removeEventListener("resize", this.resizeHandler);
     this.renderer.dispose();
+  }
+
+  /** Position/aim the camera. Overridable so a subclass can reframe (e.g. show
+   * more torso) without touching the dev avatar. */
+  protected frameCamera(): void {
+    this.camera.position.set(0, 0.4, 7);
+    this.camera.lookAt(0, 0.2, 0);
   }
 
   protected buildBody(): void {

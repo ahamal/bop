@@ -8,6 +8,13 @@ import { Avatar } from "./avatar.ts";
 import { buildAbstractHead, buildAbstractTorso } from "./abstractParts.ts";
 
 export class AbstractAvatar extends Avatar {
+  // Aim lower than the dev avatar so the figure sits higher in frame and more
+  // of the torso is visible.
+  protected frameCamera(): void {
+    this.camera.position.set(0, -0.2, 8.5);
+    this.camera.lookAt(0, -0.6, 0);
+  }
+
   protected buildBody(): void {
     const torso = buildAbstractTorso();
     torso.position.y = -0.55; // hang below the shoulder pivot

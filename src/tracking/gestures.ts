@@ -112,10 +112,10 @@ const CONFIGS: Record<GestureName, GestureConfig> = {
     // headToTorsoDepth (closeness ratio) goes negative as the head retracts, so
     // negate → positive = tucked. enter/exit are fractions of neutral closeness.
     signal: (m) => -m.headToTorsoDepth,
-    enter: 0.025,
-    exit: 0.01,
+    enter: 0.018,
+    exit: 0.009,
     requiresBody: true,
-    dwellMs: 70,
+    dwellMs: 150,
     filtered: true,
     // A deliberate tuck is done facing forward; keep it from counting mid-turn.
     guards: { yaw: 12, pitch: 12, roll: 10 },
