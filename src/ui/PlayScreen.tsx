@@ -1,6 +1,7 @@
 // The play screen (#play): the staging area before the game. It fades in (a
 // crossfade with the home's fade-out) and walks through a calm onboarding:
-//   idle → "Start camera" (a click is required to open the webcam).
+//   idle → the camera starts automatically on mount (arriving here is the
+//          intent to play); errors fall back to an overlay with "Try again".
 //   live → the camera shows with the face dots while you get comfortable. Once
 //          the head holds still for a couple seconds, a slider auto-slides 0→1,
 //          driving a STAGED crossfade:
@@ -41,6 +42,18 @@ const RING_R = 26;
 const RING_SIZE = 64;
 const RING_C = 2 * Math.PI * RING_R;
 const RING_TICKS = 20;
+// Roll semicircle: ends at (8,8) and (92,8), radius 42, chest at the bottom
+// (50,50), split into ARC_SEGS segments that fill in sweep order as the pass
+// progresses — a completion meter, not a live head-position marker.
+const ARC_SEGS = 5;
+const ARC_SEG_SPAN = 180 / ARC_SEGS;
+const ARC_SEG_PAD = 4; // deg trimmed from each side of a segment (the gaps)
+const arcX = (deg: number) => 50 + 42 * Math.cos((deg * Math.PI) / 180);
+const arcY = (deg: number) => 8 + 42 * Math.sin((deg * Math.PI) / 180);
+// Arc path from a0 to a1 along the circle; sweep 0 = decreasing angle (left →
+// right through the chest), sweep 1 = increasing (the return direction).
+const arcSeg = (a0: number, a1: number, sweep: 0 | 1) =>
+  `M ${arcX(a0)} ${arcY(a0)} A 42 42 0 0 ${sweep} ${arcX(a1)} ${arcY(a1)}`;
 // Reel: the active card is big; the next card is smaller and expands to big when
 // it becomes active. Exactly two cards show (active + next). All rem.
 const ACTIVE_H = 8.25; // active card height
@@ -96,6 +109,10 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
   const lastPlayTs = useRef(0);
   const ringRef = useRef<SVGCircleElement>(null);
   const detailRef = useRef<HTMLSpanElement>(null);
+  // Roll-card refs: one fill path per segment, toggled as progress passes them,
+  // plus the dot marking the leading edge of what's finished.
+  const arcSegRefs = useRef<(SVGPathElement | null)[]>([]);
+  const arcDotRef = useRef<SVGCircleElement>(null);
   const hudIndex = useRef(-1);
   const hudDone = useRef(false);
   // Between "player asked to recenter" and "recenter landed" (onCalibrated).
@@ -114,6 +131,13 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
     },
     [],
   );
+
+  // The camera starts on its own — arriving here is already the intent to play
+  // (a failure falls back to the error overlay's "Try again").
+  useEffect(() => {
+    startCamera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Ease morph toward a target (0 = camera, 1 = mesh) over SLIDE_MS, scaled by
   // the distance so a partial move doesn't take the full time.
@@ -224,6 +248,20 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
     if (ringRef.current) {
       const stepped = Math.round(snap.progress * RING_TICKS) / RING_TICKS;
       ringRef.current.style.strokeDashoffset = `${RING_C * (1 - stepped)}`;
+    }
+    // Roll card: fill the segments the pass has gotten through; the dot eases
+    // to the boundary of the last filled segment (progress, not head position).
+    const rollStep = NECK_ROUTINE[snap.index];
+    if (rollStep?.kind === "roll") {
+      const filled = Math.floor(snap.progress * ARC_SEGS + 1e-4);
+      arcSegRefs.current.forEach((el, i) => {
+        if (el) el.style.opacity = i < filled ? "1" : "0";
+      });
+      if (arcDotRef.current) {
+        const frac = filled / ARC_SEGS;
+        const deg = rollStep.dir === 1 ? 180 * (1 - frac) : 180 * frac;
+        arcDotRef.current.style.transform = `translate(${arcX(deg)}px, ${arcY(deg)}px)`;
+      }
     }
     if (detailRef.current) detailRef.current.textContent = snap.detail;
     if (snap.index !== hudIndex.current || snap.done !== hudDone.current) {
@@ -379,15 +417,6 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
         className="relative flex w-full max-w-md flex-col items-center gap-4 transition-[height] duration-500"
         style={{ height: started ? `${REEL_H}rem` : "9rem" }}
       >
-        {phase === "idle" && !error && (
-          <button
-            onClick={startCamera}
-            className="rounded-full bg-[#0d1117] px-8 py-3 text-lg font-semibold uppercase tracking-wide text-white shadow-lg shadow-black/20 transition hover:opacity-90"
-          >
-            Start camera
-          </button>
-        )}
-
         {phase === "live" && !started && (
           <Switch.Root
             checked={on}
@@ -445,8 +474,50 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
                       <p className={`text-center ${active ? "text-base font-medium text-text" : "text-sm text-muted"}`}>
                         {step.label}
                       </p>
-                      {active && (
-                        <div className="relative" style={{ height: RING_SIZE, width: RING_SIZE }}>
+                      {active && step.kind === "roll" && (
+                        <svg viewBox="0 0 100 58" className="flex-none" style={{ width: 76, height: 44 }}>
+                          {Array.from({ length: ARC_SEGS }, (_, si) => {
+                            // Segments in sweep order from the pass's start end.
+                            const [a0, a1] =
+                              step.dir === 1
+                                ? [180 - si * ARC_SEG_SPAN - ARC_SEG_PAD, 180 - (si + 1) * ARC_SEG_SPAN + ARC_SEG_PAD]
+                                : [si * ARC_SEG_SPAN + ARC_SEG_PAD, (si + 1) * ARC_SEG_SPAN - ARC_SEG_PAD];
+                            const d = arcSeg(a0, a1, step.dir === 1 ? 0 : 1);
+                            return (
+                              <g key={si}>
+                                <path
+                                  d={d}
+                                  fill="none"
+                                  strokeWidth="6"
+                                  strokeLinecap="round"
+                                  className="stroke-black/10 dark:stroke-white/10"
+                                />
+                                <path
+                                  ref={(el) => {
+                                    arcSegRefs.current[si] = el;
+                                  }}
+                                  d={d}
+                                  fill="none"
+                                  strokeWidth="6"
+                                  strokeLinecap="round"
+                                  className="stroke-text transition-opacity duration-300"
+                                  style={{ opacity: 0 }}
+                                />
+                              </g>
+                            );
+                          })}
+                          {/* Progress dot: sits at the leading edge of what's
+                              finished, easing along the arc as segments fill. */}
+                          <circle
+                            ref={arcDotRef}
+                            r="5"
+                            className="fill-accent transition-transform duration-300 ease-out"
+                            style={{ transform: `translate(${arcX(step.dir === 1 ? 180 : 0)}px, 8px)` }}
+                          />
+                        </svg>
+                      )}
+                      {active && step.kind !== "roll" && (
+                        <div className="relative flex-none" style={{ height: RING_SIZE, width: RING_SIZE }}>
                           <svg viewBox="0 0 64 64" className="-rotate-90" style={{ height: RING_SIZE, width: RING_SIZE }}>
                             <circle cx="32" cy="32" r={RING_R} fill="none" strokeWidth="5" className="stroke-black/10 dark:stroke-white/10" />
                             <circle

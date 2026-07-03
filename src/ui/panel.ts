@@ -24,7 +24,7 @@ interface MeterSpec {
 }
 
 // Continuous readouts. Angles are degrees from neutral (center 0); lean is the
-// head closeness ratio (center 1.0); tuck depth is head-vs-torso closeness
+// head closeness ratio (center 1.0); tuck depth is the filtered head retraction
 // (center 0, negative = retracted).
 const METERS: readonly MeterSpec[] = [
   { key: "yaw", label: "Yaw — turn L/R", center: 0, range: 30, format: deg },
@@ -32,8 +32,8 @@ const METERS: readonly MeterSpec[] = [
   { key: "roll", label: "Roll — tilt L/R", center: 0, range: 30, format: deg },
   { key: "torso", label: "Torso tilt", center: 0, range: 25, format: deg },
   { key: "lean", label: "Lean (in/out)", center: 1, range: 0.4, format: pct },
-  // Tuck diagnostics, grouped at the end: tuck depth = head depth − shoulder depth.
-  // (Head depth is the same value as Lean, shown raw for the subtraction.)
+  // Tuck diagnostics, grouped at the end: tuck depth = the head-Z retraction the
+  // threshold reads (filtered); shoulder depth is the torso-stillness guard.
   { key: "headDepth", label: "Head depth", center: 1, range: 0.4, format: ratio },
   { key: "shoulderDepth", label: "Shoulder depth", center: 1, range: 0.4, format: ratio },
   { key: "depth", label: "Tuck depth", center: 0, range: 0.08, format: ratio },

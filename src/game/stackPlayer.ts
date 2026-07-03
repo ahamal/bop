@@ -6,10 +6,14 @@
 //           advances to the next step. This is the ONLY step that centers.
 //   relax → wait for the head to return near neutral for a beat (separates reps).
 //   hold  → the timer decreases only while the target gesture is held.
-//   roll  → advance through ordered checkpoints (dominant stream), each full pass
-//           alternating direction.
+//   roll  → one directed half-circle pass. Head roll/pitch map to a single angle
+//           along a semicircle (180° = left ear down, 90° = chin to chest, 0° =
+//           right ear down); a furthest-reached mark sweeps toward the far end
+//           and can only advance CONTINUOUSLY, so skipping the middle can't count.
+//           Only `progress` (how much of the pass is finished) is exposed — the
+//           UI shows it as filling segments, not a live position.
 
-import type { GestureName, GestureState } from "../tracking/gestures.ts";
+import { GESTURE_ENTER, type GestureName, type GestureState } from "../tracking/gestures.ts";
 import type { FrameResult } from "../tracking/session.ts";
 import type { Step } from "./routine.ts";
 
@@ -35,18 +39,28 @@ const RELAX_MS = 1200;
 // the face was lost mid-recenter), re-request after this long so the step can't
 // stall forever.
 const RECENTER_RETRY_MS = 3000;
-// Holds bleed while the pose is dropped, so a long hold can't be banked from
-// tiny fragments; half-speed so a brief wobble doesn't erase real work.
-const HOLD_DECAY = 0.5;
+// Roll pass tuning. Roll/pitch are normalized by their gesture enter thresholds,
+// so magnitude 1 ≈ "far enough to count as that gesture". The tilt/pitch vector
+// is EMA-smoothed BEFORE the angle is taken — atan2 on the raw metrics flips
+// wildly near neutral — and every tolerance is generous because the off-axis
+// camera couples the angle estimates.
+const ARC_SMOOTH_MS = 250; // EMA time constant on the tilt/pitch vector
+const ARC_MIN_MAG = 0.25; // below this the head is near neutral: marker holds, no progress
+const ARC_MAX_ADVANCE = 60; // furthest mark can't jump more than this (deg) — forces a sweep
+// Reaching within this (deg) of the far end completes the pass. Very generous:
+// an angled camera can't reliably read a full ear-to-shoulder tilt at the ends.
+const ARC_END_TOL = 50;
 
 export class StackPlayer {
   private index = 0;
   private done = false;
   // movement accumulators
   private held = 0;
-  private checkpoint = 0;
-  private passes = 0;
-  private dir = 1;
+  // roll pass: smoothed tilt/pitch vector + furthest angle reached (deg; NaN
+  // until the head first leaves neutral)
+  private arcVecX = 0;
+  private arcVecY = 0;
+  private arcFurthest = NaN;
   // still accumulators
   private stillMs = 0;
   private prevAngles: { yaw: number; pitch: number; roll: number } | null = null;
@@ -72,9 +86,9 @@ export class StackPlayer {
   resetCurrent(): void {
     if (this.done) return;
     this.held = 0;
-    this.checkpoint = 0;
-    this.passes = 0;
-    this.dir = 1;
+    this.arcVecX = 0;
+    this.arcVecY = 0;
+    this.arcFurthest = NaN;
     this.stillMs = 0;
     this.prevAngles = null;
   }
@@ -146,24 +160,33 @@ export class StackPlayer {
     switch (step.kind) {
       case "hold": {
         active = isActive(f.states, step.state);
-        this.held = active
-          ? Math.min(step.holdMs, this.held + dt)
-          : Math.max(0, this.held - dt * HOLD_DECAY);
+        if (active) this.held = Math.min(step.holdMs, this.held + dt);
         if (this.held >= step.holdMs) this.advance();
         break;
       }
       case "roll": {
-        // Walk the checkpoints forwards or backwards depending on direction —
-        // indexed, so no per-frame array copy.
-        const cps = step.checkpoints;
-        const at = this.dir === 1 ? this.checkpoint : cps.length - 1 - this.checkpoint;
-        if (f.dominant === cps[at]) this.checkpoint += 1;
-        active = f.dominant !== "neutral";
-        if (this.checkpoint >= cps.length) {
-          this.passes += 1;
-          this.checkpoint = 0;
-          this.dir *= -1;
-          if (this.passes >= step.passes) this.advance();
+        // Where the head is along the semicircle: tilt (roll) is the horizontal
+        // axis, chin-down (pitch) the vertical, each normalized by its gesture
+        // enter threshold so the arc is round in "gesture units".
+        const x = -f.metrics.headRoll / GESTURE_ENTER.tiltRight; // + = tilted right
+        const y = -f.metrics.headPitch / GESTURE_ENTER.lookDown; // + = chin down
+        // Smooth the vector, not the angle (no 0°/180° wraparound artifacts).
+        const k = 1 - Math.exp(-dt / ARC_SMOOTH_MS);
+        this.arcVecX += (x - this.arcVecX) * k;
+        this.arcVecY += (y - this.arcVecY) * k;
+        const mag = Math.hypot(this.arcVecX, this.arcVecY);
+        active = mag >= ARC_MIN_MAG;
+        if (Number.isNaN(this.arcFurthest)) this.arcFurthest = step.dir === 1 ? 180 : 0;
+        if (active) {
+          // Above-horizontal (looking up) clamps to the nearest end.
+          const angle = (Math.atan2(Math.max(0, this.arcVecY), this.arcVecX) * 180) / Math.PI;
+          // The furthest mark only moves toward the far end, and only by a
+          // continuous amount — a jump straight across can't skip the chest.
+          const ahead = step.dir === 1 ? this.arcFurthest - angle : angle - this.arcFurthest;
+          if (ahead > 0 && ahead <= ARC_MAX_ADVANCE) this.arcFurthest = angle;
+          const reached =
+            step.dir === 1 ? this.arcFurthest <= ARC_END_TOL : this.arcFurthest >= 180 - ARC_END_TOL;
+          if (reached) this.advance();
         }
         break;
       }
@@ -174,9 +197,9 @@ export class StackPlayer {
   private advance(): void {
     this.index += 1;
     this.held = 0;
-    this.checkpoint = 0;
-    this.passes = 0;
-    this.dir = 1;
+    this.arcVecX = 0;
+    this.arcVecY = 0;
+    this.arcFurthest = NaN;
     this.stillMs = 0;
     this.prevAngles = null;
     this.recenterRequested = false;
@@ -207,9 +230,9 @@ export class StackPlayer {
         break;
       }
       case "roll": {
-        const len = step.checkpoints.length;
-        progress = (this.passes + this.checkpoint / len) / step.passes;
-        detail = `${Math.min(this.passes + 1, step.passes)} / ${step.passes}`;
+        const start = step.dir === 1 ? 180 : 0;
+        const swept = Number.isNaN(this.arcFurthest) ? 0 : Math.abs(start - this.arcFurthest);
+        progress = swept / (180 - ARC_END_TOL);
         break;
       }
     }

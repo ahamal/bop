@@ -15,17 +15,25 @@ export type Step =
   | { kind: "relax"; label: string; recenter?: boolean }
   // Hold a single gesture; the timer decreases only while it's held.
   | { kind: "hold"; label: string; state: GestureName; holdMs: number }
-  // A flowing pass through ordered checkpoints, alternating direction each pass.
-  | { kind: "roll"; label: string; checkpoints: GestureName[]; passes: number };
+  // One directed half-circle pass, chin swept through the chest. dir 1 rolls
+  // left → right, −1 right → left; each pass is its own card.
+  | { kind: "roll"; label: string; dir: 1 | -1 };
 
-// Each chin tuck is its own card. Between tuck reps a plain relax just separates
-// them; before each ROM hold the relax also re-zeroes (recenters) so the hold
-// measures from a clean baseline.
+// Each chin tuck is its own card. Every relax re-zeroes (recenters): the tuck
+// threshold is a ~2% depth change against the calibrated neutral, so baseline
+// drift between reps would swallow it — the recenter is what keeps rep 2+
+// detectable.
 const tuck = (): Step => ({ kind: "hold", label: "Tuck your chin in", state: "tuck", holdMs: 6000 });
-const relax = (): Step => ({ kind: "relax", label: "Relax, back to neutral" });
-const relaxZero = (): Step => ({ kind: "relax", label: "Relax, back to neutral", recenter: true });
+const relax = (): Step => ({ kind: "relax", label: "Relax, back to neutral", recenter: true });
 
+// TEMP(testing): jump straight to the roll cards — restore the full routine below.
 export const NECK_ROUTINE: Step[] = [
+  { kind: "still", label: "Sit comfortably and hold still" },
+  { kind: "roll", label: "Slow half circle, left ear to chest to right", dir: 1 },
+  { kind: "roll", label: "And back, right ear to chest to left", dir: -1 },
+];
+
+export const FULL_NECK_ROUTINE: Step[] = [
   { kind: "still", label: "Sit comfortably and hold still" },
   // Chin tucks — activation, 6 reps.
   tuck(), relax(),
@@ -33,25 +41,21 @@ export const NECK_ROUTINE: Step[] = [
   tuck(), relax(),
   tuck(), relax(),
   tuck(), relax(),
-  tuck(), relaxZero(),
+  tuck(), relax(),
   // Range-of-motion holds, each preceded by a relax/re-zero.
   { kind: "hold", label: "Tilt your left ear to your shoulder", state: "tiltLeft", holdMs: 20000 },
-  relaxZero(),
+  relax(),
   { kind: "hold", label: "Tilt your right ear to your shoulder", state: "tiltRight", holdMs: 20000 },
-  relaxZero(),
+  relax(),
   { kind: "hold", label: "Look over your left shoulder", state: "lookLeft", holdMs: 20000 },
-  relaxZero(),
+  relax(),
   { kind: "hold", label: "Look over your right shoulder", state: "lookRight", holdMs: 20000 },
-  relaxZero(),
+  relax(),
   { kind: "hold", label: "Lower your chin to your chest", state: "lookDown", holdMs: 20000 },
-  relaxZero(),
+  relax(),
   { kind: "hold", label: "Gently look up", state: "lookUp", holdMs: 5000 },
-  relaxZero(),
-  // Flowing cooldown.
-  {
-    kind: "roll",
-    label: "Slow half circles, ear to chest to ear",
-    checkpoints: ["tiltLeft", "lookDown", "tiltRight"],
-    passes: 2,
-  },
+  relax(),
+  // Flowing cooldown: one card per half-circle pass.
+  { kind: "roll", label: "Slow half circle, left ear to chest to right", dir: 1 },
+  { kind: "roll", label: "And back, right ear to chest to left", dir: -1 },
 ];

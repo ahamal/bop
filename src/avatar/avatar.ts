@@ -27,6 +27,13 @@ const TRANSLATE_GAIN = 6;
 const MAX_OFFSET = 1.6; // clamp so a lost track can't fling a part offscreen
 const clampOffset = (v: number) => Math.max(-MAX_OFFSET, Math.min(MAX_OFFSET, v));
 
+// Shoulder width is a noisy depth estimate, so the torso zoom gets its own
+// treatment: rest jitter inside the deadband doesn't move the target at all,
+// and real changes ease in much slower than the other channels — otherwise the
+// chest visibly pulses in and out.
+const TORSO_ZOOM_DEADBAND = 0.03;
+const TORSO_ZOOM_K = 0.08;
+
 export class Avatar {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -228,7 +235,9 @@ export class Avatar {
       this.bodyNeutral.width > 0 && body.width > 0
         ? body.width / this.bodyNeutral.width
         : 1;
-    this.targetBody.zoom = Math.max(0.6, Math.min(1.8, zoom));
+    if (Math.abs(zoom - this.targetBody.zoom) > TORSO_ZOOM_DEADBAND) {
+      this.targetBody.zoom = Math.max(0.6, Math.min(1.8, zoom));
+    }
   }
 
   private resize(): void {
@@ -259,7 +268,7 @@ export class Avatar {
     this.curBody.tilt += (this.targetBody.tilt - this.curBody.tilt) * k;
     this.curBody.sway += (this.targetBody.sway - this.curBody.sway) * k;
     this.curBody.lift += (this.targetBody.lift - this.curBody.lift) * k;
-    this.curBody.zoom += (this.targetBody.zoom - this.curBody.zoom) * k;
+    this.curBody.zoom += (this.targetBody.zoom - this.curBody.zoom) * TORSO_ZOOM_K;
     this.torsoGroup.rotation.z = this.curBody.tilt; // tilt: torso only
     this.bodyGroup.position.x = this.curBody.sway; // sway: torso only (not head)
     // Lift raises/lowers the torso following the shoulders in the camera frame.

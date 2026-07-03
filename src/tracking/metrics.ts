@@ -18,19 +18,17 @@ export interface Metrics {
   torsoTilt: number;
   /** Head closeness vs neutral, from the face matrix Z. >1 closer, <1 farther. */
   headCloseness: number;
-  /** Torso closeness vs neutral, from shoulder width. >1 closer. */
+  /**
+   * Torso closeness vs neutral, from shoulder width. >1 closer. The tuck
+   * detector uses it as a STILLNESS GUARD (torso must hold near 1), not as a
+   * subtraction — shoulder width doesn't scale proportionally with the face-Z
+   * head term, so subtracting it injected that mismatch into the tuck signal.
+   */
   torsoCloseness: number;
   /**
-   * headToTorsoDepth = headCloseness − torsoCloseness (≈0 at neutral). Negative =
-   * head sits farther back than the torso — i.e. retracted, as in a chin tuck.
-   * Small-magnitude, so the detector filters it before thresholding. Only
-   * meaningful when bodyTracked.
-   */
-  headToTorsoDepth: number;
-  /**
-   * Whether a trustworthy torso reading backed this frame's depth. The torso is
-   * the reference that separates a real tuck (head retracts relative to a still
-   * torso) from a whole-body lean, so tuck detection is gated on it.
+   * Whether a trustworthy torso reading backed this frame. The torso is what
+   * separates a real tuck (head retracts while the torso holds still) from a
+   * whole-body lean, so tuck detection is gated on it.
    */
   bodyTracked: boolean;
 }
@@ -52,11 +50,6 @@ export function computeMetrics(
         : 1;
   }
 
-  // Tuck = the head retracting (its matrix-Z closeness dropping) while the torso
-  // holds, so the difference goes negative. The head Z is what actually tracks a
-  // retraction; the shoulder-width torso term cancels a whole-body lean.
-  const headToTorsoDepth = headCloseness - torsoCloseness;
-
   return {
     headPitch: relHead.pitch,
     headYaw: MIRROR_SIGN * relHead.yaw,
@@ -64,7 +57,6 @@ export function computeMetrics(
     torsoTilt,
     headCloseness,
     torsoCloseness,
-    headToTorsoDepth,
     bodyTracked,
   };
 }

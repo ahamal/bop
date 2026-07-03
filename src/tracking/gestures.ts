@@ -73,6 +73,11 @@ interface GestureConfig {
   requiresBody?: boolean; // needs a trustworthy torso (tuck)
   dwellMs?: number; // engage condition must persist this long first
   filtered?: boolean; // smooth the signal before thresholding (tuck)
+  // Torso-stillness guard: |torsoCloseness − 1| must stay at/below this for the
+  // gesture to engage or persist. This is how a tuck (head retracts, torso
+  // holds) is told apart from a whole-body lean — as a veto, not a subtraction,
+  // so shoulder-width scale error can't shift the signal being thresholded.
+  torsoBand?: number;
   // Cross-axis guards: each named axis's magnitude (deg from neutral) must stay
   // at/below its limit for this gesture to engage, and engagement drops if it's
   // exceeded. This is what keeps a turn from bleeding into a tilt, or a turn/nod
@@ -81,8 +86,8 @@ interface GestureConfig {
   guards?: Partial<Record<"yaw" | "pitch" | "roll", number>>;
 }
 
-// Angle thresholds are degrees from neutral; tuck is on the head-vs-torso depth
-// ratio (metrics.headToTorsoDepth). These are the tuning knobs. Lateral flexion
+// Angle thresholds are degrees from neutral; tuck is on the head retraction
+// ratio (1 − metrics.headCloseness). These are the tuning knobs. Lateral flexion
 // (roll) and pitch use smaller ranges than yaw because their comfortable range
 // of motion is smaller.
 const CONFIGS: Record<GestureName, GestureConfig> = {
@@ -109,12 +114,15 @@ const CONFIGS: Record<GestureName, GestureConfig> = {
   },
   tuck: {
     axis: "depth",
-    // headToTorsoDepth (closeness ratio) goes negative as the head retracts, so
-    // negate → positive = tucked. enter/exit are fractions of neutral closeness.
-    signal: (m) => -m.headToTorsoDepth,
+    // Head retraction alone: face-matrix-Z closeness drops below 1 as the head
+    // pulls back, so 1 − closeness is positive = tucked. The torso is a
+    // stillness veto (torsoBand), not part of the signal — its scale error and
+    // noise stay out of this tiny threshold. Fractions of neutral closeness.
+    signal: (m) => 1 - m.headCloseness,
     enter: 0.018,
     exit: 0.009,
     requiresBody: true,
+    torsoBand: 0.04,
     dwellMs: 150,
     filtered: true,
     // A deliberate tuck is done facing forward; keep it from counting mid-turn.
@@ -137,6 +145,10 @@ function guardsSatisfied(cfg: GestureConfig, m: Metrics): boolean {
   if (g.pitch !== undefined && Math.abs(m.headPitch) > g.pitch) return false;
   if (g.roll !== undefined && Math.abs(m.headRoll) > g.roll) return false;
   return true;
+}
+
+function torsoStill(cfg: GestureConfig, m: Metrics): boolean {
+  return cfg.torsoBand === undefined || Math.abs(m.torsoCloseness - 1) <= cfg.torsoBand;
 }
 
 export class GestureDetector {
@@ -185,7 +197,8 @@ export class GestureDetector {
     return GESTURE_NAMES.map((n) => this.states[n]);
   }
 
-  /** Filtered head-vs-torso depth — what the tuck threshold compares against. */
+  /** Filtered head retraction (closeness − 1, so negative = retracted) — the
+   * signal the tuck threshold compares against, in the meter's sign convention. */
   get depthFiltered(): number {
     return -this.states.tuck.value;
   }
@@ -211,7 +224,7 @@ export class GestureDetector {
     st.value = sig;
 
     const valid = !cfg.requiresBody || m.bodyTracked;
-    const guardsOk = guardsSatisfied(cfg, m);
+    const guardsOk = guardsSatisfied(cfg, m) && torsoStill(cfg, m);
     const engaged = valid && guardsOk && sig >= cfg.enter;
 
     if (!st.active) {

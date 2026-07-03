@@ -1,0 +1,23 @@
+# bop reminder server — one Worker, two halves:
+#   fetch     → POST /remind stores a one-shot reminder in KV
+#   scheduled → cron sweep sends due reminders via Web Push, then deletes them
+# Setup steps (KV id, VAPID keys, secret) are in README.md.
+
+name = "bop-reminders"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+routes = [{ pattern = "bop-api.ashween.com", custom_domain = true }]
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[kv_namespaces]]
+binding = "REMINDERS"
+id = "16bf7c2fcc4d4a889e5eea644ca709a5"
+
+[vars]
+VAPID_PUBLIC_KEY = "BNFq4yyruc-KkF2qGr51bc4WRK-1dwwetPquDoWAOxLPGG9ZO1d7myairkfxdA3WODZ_F3KeGpPc0B5VuaM2eXI"
+VAPID_SUBJECT = "mailto:ashes09@gmail.com"
+# VAPID_PRIVATE_KEY is a secret, never in this file:
+#   npx wrangler secret put VAPID_PRIVATE_KEY        (production)
+#   server/.dev.vars                                  (local dev, gitignored)
