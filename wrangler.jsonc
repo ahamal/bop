@@ -1,0 +1,10 @@
+// Config for the git-connected Cloudflare Workers build that serves the app:
+// no Worker script, just the built static assets. (The reminder API is a
+// separate Worker with its own config in server/wrangler.toml.)
+{
+  "name": "bop",
+  "compatibility_date": "2026-07-03",
+  "assets": {
+    "directory": "./dist"
+  }
+}
