@@ -1,8 +1,16 @@
 # TODO
 
+## Next up
+
+- [ ] **Music & sound** — audio for the routine: ambient/backing track plus
+      cues (step complete, recenter landed, routine done). Needs a sound
+      direction pass first: calm-coach vs game-y.
+- [ ] **Scheduling** — wire the reminder scheduling UI ("remind me in 2 hours",
+      "tomorrow at hh:mm") into the flow; backend is live (see Reminders below).
+
 ## Before merging to main (merge = deploy to bop.ashween.com)
 
-- [ ] Commit the working tree (routine fixes, arc segments, reminder plumbing, `server/`)
+- [x] Commit the working tree (routine fixes, arc segments, reminder plumbing, `server/`) — `ae655a2`, pushed
 - [ ] **Restore the full routine** — `NECK_ROUTINE` in `src/game/routine.ts` is truncated
       to still → roll → roll for testing; swap `FULL_NECK_ROUTINE` back in and delete
       the temp block
@@ -36,5 +44,8 @@
 - [ ] Notification icon: add an `icon` to `showNotification` in `public/sw.js`
       (currently shows the browser default)
 - [ ] Favicon / page title / meta for the public site
-- [ ] Personal homepage repo → ashween.com (root domain currently unused)
+- [ ] Personal homepage → ashween.com: placeholder scaffolded at
+      `~/Desktop/work/ashween.com` (git-initialized, uncommitted) — create the
+      GitHub repo, push, connect to Pages (no build step, output `/`), attach
+      `ashween.com` + `www`
 - [ ] Consider GitHub Action to auto-deploy `server/` on push once it churns

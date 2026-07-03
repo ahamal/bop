@@ -54,9 +54,14 @@ export async function scheduleReminder(
 }
 
 // Web Push wants the VAPID key as raw bytes; it's distributed base64url-encoded.
-function urlBase64ToUint8Array(b64url: string): Uint8Array {
+// (Built with the length constructor, not Uint8Array.from — TS types the latter
+// over ArrayBufferLike, which applicationServerKey rejects.)
+function urlBase64ToUint8Array(b64url: string) {
   const b64 = (b64url + "=".repeat((4 - (b64url.length % 4)) % 4))
     .replace(/-/g, "+")
     .replace(/_/g, "/");
-  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const raw = atob(b64);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return bytes;
 }
