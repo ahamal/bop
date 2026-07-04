@@ -2,18 +2,34 @@
 
 ## Next up
 
+- [ ] **Home avatar personality** — the hero avatar on the home page reads
+      robotic; give it some life (idle motion, blinks, small reactions —
+      something with character rather than a static rig).
+- [ ] **Minigames** — add head-tracked minigames on top of the routine engine
+      (candidate ideas discussed: firefly keeper, metronome garden, pottery
+      wheel, owl sentry; start as a `minigame` step kind reusing StackPlayer's
+      frame/snapshot pattern, canvas playfield layer, React for chrome only).
+
+- [ ] **No-camera mode (privacy)** — home screen gets two buttons: "Begin with
+      camera" and "Begin without camera". Without-camera is a guided-only run:
+      no tracking, steps advance on timers, the 3D avatar *demonstrates* each
+      movement instead of mimicking the player, and the recenter button is
+      replaced by a pause button (nothing to recenter without tracking).
+
 - [ ] **Music & sound** — audio for the routine: ambient/backing track plus
       cues (step complete, recenter landed, routine done). Needs a sound
       direction pass first: calm-coach vs game-y.
-- [ ] **Scheduling** — wire the reminder scheduling UI ("remind me in 2 hours",
-      "tomorrow at hh:mm") into the flow; backend is live (see Reminders below).
+- [x] **Scheduling** — reminder scheduler on the completion card
+      (`ReminderScheduler.tsx`): "in 2 hours" default, dropdown for other hours /
+      tomorrow / up to 3 days (day choices reveal a time field), dev-only
+      "in 2 minutes"; plus confetti blast + completion text.
 
 ## Before merging to main (merge = deploy to bop.ashween.com)
 
 - [x] Commit the working tree (routine fixes, arc segments, reminder plumbing, `server/`) — `ae655a2`, pushed
 - [ ] **Restore the full routine** — `NECK_ROUTINE` in `src/game/routine.ts` is truncated
-      to still → roll → roll for testing; swap `FULL_NECK_ROUTINE` back in and delete
-      the temp block
+      to still → look left → relax → look right for testing; swap `FULL_NECK_ROUTINE`
+      back in and delete the temp block
 - [ ] Sanity pass of the whole flow start-to-finish once at full length
 
 ## Detection tuning (verify against the live dev readout)
@@ -30,11 +46,11 @@
 
 ## Reminders (backend is deployed: bop-api.ashween.com)
 
-- [ ] Local end-to-end test per `server/README.md` (schedule 5s reminder →
-      `npm run trigger` in server/ → notification with tab closed)
-- [ ] Wire the UI: "Remind me in 2 hours" / "Tomorrow at hh:mm" buttons —
-      natural home is the completion card; call `scheduleReminder()` in the click
-      handler, hide behind `remindersSupported()`
+- [x] Local end-to-end test: scheduled from the app UI → sweep → notification
+      shown (2026-07-03). Note: wrangler must be run with `--config wrangler.toml`
+      (now pinned in server scripts) or it picks up the root wrangler.jsonc.
+- [x] Wire the UI: `ReminderScheduler` on the completion card — calls
+      `scheduleReminder()`, hidden behind `remindersSupported()`
 - [ ] Production smoke test after the site deploys (schedule from
       bop.ashween.com, wait out one 5-min sweep)
 

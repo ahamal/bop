@@ -18,6 +18,12 @@ import { useEffect, useRef, useState } from "react";
 import * as Switch from "@radix-ui/react-switch";
 import { VideoCameraIcon, ExclamationTriangleIcon, ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { SettingsMenu } from "./SettingsMenu.tsx";
+import { Button } from "./Button.tsx";
+import { ConfettiBurst } from "./ConfettiBurst.tsx";
+import { ReminderScheduler } from "./ReminderScheduler.tsx";
+import { MusicPlayer } from "./MusicPlayer.tsx";
+import { musicPlayer } from "../audio/player.ts";
+import { playCelebrate, playDone, playTick } from "../audio/sfx.ts";
 import { TrackingSession, type FrameResult } from "../tracking/session.ts";
 import { AbstractAvatar } from "../avatar/AbstractAvatar.ts";
 import { StackPlayer } from "../game/stackPlayer.ts";
@@ -56,15 +62,30 @@ const arcSeg = (a0: number, a1: number, sweep: 0 | 1) =>
   `M ${arcX(a0)} ${arcY(a0)} A 42 42 0 0 ${sweep} ${arcX(a1)} ${arcY(a1)}`;
 // Reel: the active card is big; the next card is smaller and expands to big when
 // it becomes active. Exactly two cards show (active + next). All rem.
-const ACTIVE_H = 8.25; // active card height
+const ACTIVE_H = 9.25; // active card height (fits label + set pips + timer ring)
 const NEXT_H = 4.5; // upcoming card height
 const CARD_GAP = 1; // gap between cards (also room for the shadow)
 const CARD_STEP = ACTIVE_H + CARD_GAP; // reel advances one of these per step
 const REEL_PAD = 1; // viewport padding so the outer shadows aren't clipped
 const REEL_H = 2 * REEL_PAD + ACTIVE_H + CARD_GAP + NEXT_H; // exact 2-card height
 
-const BTN =
-  "rounded-full border border-black/15 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-text transition hover:bg-black/5 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent dark:border-white/15 dark:hover:bg-white/10";
+// Rep bookkeeping for repeated movement cards (the chin tucks): REP_OF[i] is
+// this card's 1-based rep number among identical steps, REP_TOTAL[i] how many
+// there are in the routine — so a card can show "which set am I on".
+const repKey = (s: (typeof NECK_ROUTINE)[number]) =>
+  s.kind === "hold" ? `${s.state}:${s.label}` : null;
+const REP_TOTAL = new Map<string, number>();
+const REP_OF = NECK_ROUTINE.map((s) => {
+  const k = repKey(s);
+  if (!k) return 0;
+  const n = (REP_TOTAL.get(k) ?? 0) + 1;
+  REP_TOTAL.set(k, n);
+  return n;
+});
+const repTotalAt = (i: number): number => {
+  const k = repKey(NECK_ROUTINE[i]);
+  return k ? (REP_TOTAL.get(k) ?? 0) : 0;
+};
 
 type Phase = "idle" | "live";
 
@@ -103,6 +124,9 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
   // on the first nod (guarded so it only happens once).
   const nodArmed = useRef(false);
   const startedRef = useRef(false);
+  // Music autoplays when the camera→mesh slide first heads to the mesh — once;
+  // pausing stays paused.
+  const musicStarted = useRef(false);
 
   // The routine player + per-frame HUD refs (timer ring updated imperatively).
   const playerRef = useRef<StackPlayer | null>(null);
@@ -115,6 +139,10 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
   const arcDotRef = useRef<SVGCircleElement>(null);
   const hudIndex = useRef(-1);
   const hudDone = useRef(false);
+  // Progress-tick bookkeeping: last credited whole second (holds) / last filled
+  // arc segment (rolls) already ticked for the current card.
+  const lastTickSec = useRef(0);
+  const lastArcTick = useRef(0);
   // Between "player asked to recenter" and "recenter landed" (onCalibrated).
   const recenterPending = useRef(false);
 
@@ -123,11 +151,13 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
     return () => cancelAnimationFrame(id);
   }, []);
 
-  // Tear down the session (and camera) + any running slide when we leave.
+  // Tear down the session (and camera) + any running slide when we leave; the
+  // music belongs to the session, so it stops (pauses) with it.
   useEffect(
     () => () => {
       cancelAnimationFrame(animId.current);
       sessionRef.current?.stop();
+      musicPlayer.stop();
     },
     [],
   );
@@ -142,6 +172,12 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
   // Ease morph toward a target (0 = camera, 1 = mesh) over SLIDE_MS, scaled by
   // the distance so a partial move doesn't take the full time.
   const slideTo = (target: number): void => {
+    // Sliding to the mesh is the moment the session really starts — kick off
+    // the music (once; a later manual pause stays paused).
+    if (target === 1 && !musicStarted.current) {
+      musicStarted.current = true;
+      musicPlayer.play();
+    }
     cancelAnimationFrame(animId.current);
     const from = morphRef.current;
     const dur = Math.max(1, SLIDE_MS * Math.abs(target - from));
@@ -223,6 +259,8 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
     hudIndex.current = -1;
     hudDone.current = false;
     recenterPending.current = false;
+    lastTickSec.current = 0;
+    lastArcTick.current = 0;
     setHud({ index: -1, done: false });
   };
 
@@ -252,8 +290,26 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
     // Roll card: fill the segments the pass has gotten through; the dot eases
     // to the boundary of the last filled segment (progress, not head position).
     const rollStep = NECK_ROUTINE[snap.index];
+    // Hold cards: a quiet tick each time a whole second of hold time is
+    // credited — audible "it's registering" feedback for positions where the
+    // ring is out of view. Brighter on the last 3s; the final second is the
+    // done tap's job, not a tick.
+    if (rollStep?.kind === "hold") {
+      const sec = Math.floor((snap.progress * rollStep.holdMs) / 1000 + 1e-4);
+      if (sec > lastTickSec.current) {
+        lastTickSec.current = sec;
+        const totalSec = rollStep.holdMs / 1000;
+        if (sec < totalSec) playTick(totalSec - sec <= 3);
+      }
+    }
     if (rollStep?.kind === "roll") {
       const filled = Math.floor(snap.progress * ARC_SEGS + 1e-4);
+      // Same feedback for rolls, but spatial: tick as each arc segment fills
+      // (the last segment completes the card → done tap instead).
+      if (filled > lastArcTick.current) {
+        lastArcTick.current = filled;
+        if (filled < ARC_SEGS) playTick(false);
+      }
       arcSegRefs.current.forEach((el, i) => {
         if (el) el.style.opacity = i < filled ? "1" : "0";
       });
@@ -265,8 +321,19 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
     }
     if (detailRef.current) detailRef.current.textContent = snap.detail;
     if (snap.index !== hudIndex.current || snap.done !== hudDone.current) {
+      // Any card finishing (movement, relax, still) → "done" tap; the final
+      // one → the confetti crackle instead. The old-index guard skips restarts.
+      if (hudIndex.current >= 0) {
+        if (snap.done && !hudDone.current) {
+          playCelebrate();
+          musicPlayer.duck();
+        }
+        else if (snap.index > hudIndex.current) playDone();
+      }
       hudIndex.current = snap.index;
       hudDone.current = snap.done;
+      lastTickSec.current = 0;
+      lastArcTick.current = 0;
       setHud({ index: snap.index, done: snap.done });
     }
   };
@@ -321,7 +388,11 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
   // Manual recenter. Mid-exercise it moves the neutral baseline, so progress
   // earned against the old one is void — restart the current card.
   const recenter = (): void => {
-    if (startedRef.current) playerRef.current?.resetCurrent();
+    if (startedRef.current) {
+      playerRef.current?.resetCurrent();
+      lastTickSec.current = 0;
+      lastArcTick.current = 0;
+    }
     sessionRef.current?.recenter();
   };
 
@@ -379,12 +450,9 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
                 <ExclamationTriangleIcon className="h-10 w-10 text-red-500" />
                 <span className="text-sm font-medium text-text">Camera unavailable</span>
                 <span className="text-xs text-muted">{error}</span>
-                <button
-                  onClick={startCamera}
-                  className="mt-1 rounded-full border border-black/15 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-text transition hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
-                >
+                <Button onClick={startCamera} className="mt-1">
                   Try again
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -438,12 +506,8 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
             meshed && !started ? "opacity-100" : "pointer-events-none opacity-0"
           }`}
         >
-          <button onClick={recenter} className={BTN}>
-            Recenter
-          </button>
-          <button onClick={beginGame} className={BTN}>
-            Begin
-          </button>
+          <Button onClick={recenter}>Recenter</Button>
+          <Button onClick={beginGame}>Begin</Button>
         </div>
 
         {/* Game HUD: a reel of step cards. The active card is centered; finished
@@ -474,6 +538,31 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
                       <p className={`text-center ${active ? "text-base font-medium text-text" : "text-sm text-muted"}`}>
                         {step.label}
                       </p>
+                      {/* Set progress for repeated cards (chin tucks): one pip
+                          per rep — done solid, current hollow + pulsing — with
+                          the count alongside. */}
+                      {active && repTotalAt(i) > 1 && (
+                        <div
+                          className="flex items-center gap-1.5"
+                          aria-label={`Set ${REP_OF[i]} of ${repTotalAt(i)}`}
+                        >
+                          {Array.from({ length: repTotalAt(i) }, (_, d) => (
+                            <span
+                              key={d}
+                              className={`h-1.5 w-1.5 rounded-full transition-colors duration-300 ${
+                                d < REP_OF[i] - 1
+                                  ? "bg-accent"
+                                  : d === REP_OF[i] - 1
+                                    ? "animate-pulse ring-1 ring-inset ring-accent"
+                                    : "bg-black/10 dark:bg-white/10"
+                              }`}
+                            />
+                          ))}
+                          <span className="ml-1 text-[0.65rem] tabular-nums text-muted">
+                            {REP_OF[i]} of {repTotalAt(i)}
+                          </span>
+                        </div>
+                      )}
                       {active && step.kind === "roll" && (
                         <svg viewBox="0 0 100 58" className="flex-none" style={{ width: 76, height: 44 }}>
                           {Array.from({ length: ARC_SEGS }, (_, si) => {
@@ -543,23 +632,21 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
                   </div>
                 );
               })}
-              {/* Completion card at the end of the reel. */}
+              {/* Completion — no card, just the message and the reminder row;
+                  invisible until the routine is done, then fades in. */}
               <div className="flex w-full items-start justify-center" style={{ height: `${CARD_STEP}rem` }}>
+                {/* Top-aligned, not centered — centering in the reel-sized box
+                    left a dead band between the stage and the heading. */}
                 <div
-                  style={{ height: `${ACTIVE_H}rem` }}
-                  className="flex w-full max-w-xs flex-col items-center justify-center gap-3 rounded-2xl bg-panel px-6 shadow-lg ring-1 ring-black/5 dark:ring-white/10"
+                  className={`flex w-full flex-col items-center gap-4 pt-2 transition-opacity duration-700 ${
+                    hud.done ? "opacity-100" : "opacity-0"
+                  }`}
                 >
-                  <p className="text-base font-medium text-text">All done — nice work.</p>
-                  {hud.done && (
-                    <div className="flex items-center gap-3">
-                      <button onClick={restartGame} className={BTN}>
-                        Again
-                      </button>
-                      <button onClick={onExit} className={BTN}>
-                        Home
-                      </button>
-                    </div>
-                  )}
+                  <p className="text-2xl font-semibold text-text">Routine complete!</p>
+                  <ReminderScheduler />
+                  <Button onClick={onExit} className="mt-1">
+                    Go back home
+                  </Button>
                 </div>
               </div>
             </div>
@@ -567,15 +654,26 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
         )}
       </div>
 
+      {/* Confetti blast over the whole screen when the routine completes;
+          "Again" resets hud.done, so the next completion fires a fresh burst. */}
+      {hud.done && <ConfettiBurst />}
+
       {/* Recenter — below the cards during play (gone once the routine is done). */}
       {started && !hud.done && (
-        <button
-          onClick={recenter}
-          className="rounded-full bg-panel px-4 py-2 text-xs font-semibold uppercase tracking-wide text-text shadow outline-none ring-1 ring-black/10 transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-accent dark:ring-white/10"
-        >
+        <Button onClick={recenter} className="bg-panel shadow">
           Recenter
-        </button>
+        </Button>
       )}
+
+      {/* Music pill: hidden through camera staging; fades in once detection has
+          settled and the camera→mesh slide is underway. */}
+      <div
+        className={`absolute bottom-4 right-4 transition-opacity duration-700 ${
+          morph > 0 ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      >
+        <MusicPlayer />
+      </div>
     </div>
   );
 }

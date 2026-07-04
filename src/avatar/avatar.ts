@@ -6,6 +6,7 @@
 import * as THREE from "three";
 import type { HeadPose } from "../tracking/pose.ts";
 import type { BodyPose } from "../tracking/bodyTracker.ts";
+import type { FaceExpression } from "../tracking/face.ts";
 import { MIRROR_SIGN } from "../tracking/mirror.ts";
 
 const DEG2RAD = Math.PI / 180;
@@ -65,6 +66,10 @@ export class Avatar {
   // independent of the torso (a chin-tuck moves the head, not the body).
   private curZoom = 1;
   private targetZoom = 1;
+
+  // Expression (mouth open, per-eye closedness), smoothed like the pose.
+  private curFace: FaceExpression = { mouthOpen: 0, leftEyeClosed: 0, rightEyeClosed: 0 };
+  private targetFace: FaceExpression = { mouthOpen: 0, leftEyeClosed: 0, rightEyeClosed: 0 };
 
   private resizeHandler = (): void => this.resize();
   private rafId = 0;
@@ -206,6 +211,15 @@ export class Avatar {
     this.targetZoom = Math.max(0.6, Math.min(1.8, zoom));
   }
 
+  /** Drive the facial expression (mouth open / eyes closed, each 0..1). */
+  setFace(f: FaceExpression): void {
+    this.targetFace = f;
+  }
+
+  /** Render the (smoothed) expression. Base look has no expression geometry;
+   * subclasses with mouth/eye meshes override this. */
+  protected applyFace(_f: FaceExpression): void {}
+
   /** Capture the current shoulders as the resting "centered/straight" pose. */
   calibrateBody(body: BodyPose): void {
     this.bodyNeutral = {
@@ -280,6 +294,12 @@ export class Avatar {
     // grow when the head leans in.
     this.curZoom += (this.targetZoom - this.curZoom) * k;
     this.headPivot.scale.setScalar(this.curZoom);
+
+    // Expression: same smoothing so blinks don't strobe the geometry.
+    this.curFace.mouthOpen += (this.targetFace.mouthOpen - this.curFace.mouthOpen) * k;
+    this.curFace.leftEyeClosed += (this.targetFace.leftEyeClosed - this.curFace.leftEyeClosed) * k;
+    this.curFace.rightEyeClosed += (this.targetFace.rightEyeClosed - this.curFace.rightEyeClosed) * k;
+    this.applyFace(this.curFace);
 
     this.renderer.render(this.scene, this.camera);
     this.rafId = requestAnimationFrame(this.renderLoop);

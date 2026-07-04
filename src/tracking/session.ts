@@ -27,6 +27,7 @@ import { Avatar } from "../avatar/avatar.ts";
 import { computeMetrics, type Metrics } from "./metrics.ts";
 import { Calibrator } from "./calibration.ts";
 import { SequenceDetector, type DominantState, type SequenceEvent } from "./sequence.ts";
+import { computeExpression, type FaceExpression } from "./face.ts";
 import type { HeadPose } from "./pose.ts";
 
 const CALIB_MS = 1500; // initial hold-still window
@@ -53,6 +54,8 @@ export interface FrameResult {
   zoom: number;
   /** Raw face landmarks (normalized 0..1), for drawing an overlay. */
   faceLandmarks: Frame["landmarks"];
+  /** Mouth-open / per-eye-closed ratios for this frame (null if unreadable). */
+  expression: FaceExpression | null;
   /** Last-known body (smooth), for drawing the shoulder overlay. */
   body: BodyPose | null;
   /** True while the hold-still neutral capture is in progress. */
@@ -271,6 +274,8 @@ export class TrackingSession {
         frame.pose.distance > 0 ? this.neutral.distance / frame.pose.distance : 1;
       this.avatar?.setPose(rel);
       this.avatar?.setZoom(zoom);
+      const expression = computeExpression(frame.landmarks);
+      if (expression) this.avatar?.setFace(expression);
 
       const m = computeMetrics(rel, zoom, freshBody, this.bodyNeutral);
       const events = this.calibrating ? [] : this.detector.update(m, now);
@@ -287,6 +292,7 @@ export class TrackingSession {
         rel,
         zoom,
         faceLandmarks: frame.landmarks,
+        expression,
         body: this.latestBody,
         calibrating: this.calibrating,
         fps: this.fps,

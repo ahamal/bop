@@ -27,6 +27,18 @@
   --color-muted: var(--color-slate-400);
 }
 
+/* Music player EQ bars: each bar pulses between short and full, offset by
+   animation-delay; paused (frozen) when playback is paused. */
+@keyframes eq {
+  0%,
+  100% {
+    height: 30%;
+  }
+  50% {
+    height: 100%;
+  }
+}
+
 @layer base {
   body {
     background-color: var(--color-bg);
