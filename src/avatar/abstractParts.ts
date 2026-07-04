@@ -28,13 +28,14 @@ export function buildAbstractHead(): THREE.Group {
   group.add(head);
 
   // A low-poly nose: a slim triangular prism (3-sided cylinder) whose forward
-  // vertex forms the ridge, running down the face — narrower at the bridge, a
-  // touch wider at the nostrils, flattened against the face and tilted so the
-  // tip juts out more than the bridge. Also makes the head's facing obvious.
-  const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.2, 0.8, 3), mat);
-  nose.scale.set(0.85, 1, 0.65);
-  nose.position.set(0, 0.92, 0.78);
-  nose.rotation.x = -0.18;
+  // vertex forms the ridge — narrower at the bridge, a touch wider at the
+  // nostrils, tilted so the tip juts out more than the bridge. Sized to the
+  // middle third of the face (bridge ~ eye line, nostrils well clear of the
+  // mouth) rather than running forehead-to-chin. Makes the facing obvious.
+  const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.17, 0.5, 3), mat);
+  nose.scale.set(0.8, 1, 0.6);
+  nose.position.set(0, 0.8, 0.84);
+  nose.rotation.x = -0.22;
   group.add(nose);
 
   return group;

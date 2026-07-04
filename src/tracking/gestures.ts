@@ -91,8 +91,8 @@ interface GestureConfig {
 // (roll) and pitch use smaller ranges than yaw because their comfortable range
 // of motion is smaller.
 const CONFIGS: Record<GestureName, GestureConfig> = {
-  lookLeft: { axis: "yaw", signal: (m) => -m.headYaw, enter: 18, exit: 9 },
-  lookRight: { axis: "yaw", signal: (m) => m.headYaw, enter: 18, exit: 9 },
+  lookLeft: { axis: "yaw", signal: (m) => -m.headYaw, enter: 21, exit: 10 },
+  lookRight: { axis: "yaw", signal: (m) => m.headYaw, enter: 21, exit: 10 },
   // pitch is chin-down-positive in metrics, but reads inverted for "looking" —
   // so up is +pitch, down is −pitch here.
   lookUp: { axis: "pitch", signal: (m) => m.headPitch, enter: 15, exit: 8 },

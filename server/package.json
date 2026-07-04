@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --test-scheduled",
-    "deploy": "wrangler deploy",
+    "dev": "wrangler dev --config wrangler.toml --test-scheduled",
+    "deploy": "wrangler deploy --config wrangler.toml",
     "trigger": "curl \"http://localhost:8787/__scheduled?cron=*%2F5+*+*+*+*\""
   },
   "dependencies": {

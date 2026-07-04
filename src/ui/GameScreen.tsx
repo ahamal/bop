@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { WrenchScrewdriverIcon } from "@heroicons/react/24/outline";
 import { SettingsMenu } from "./SettingsMenu.tsx";
+import { Button } from "./Button.tsx";
 import { HeroAvatar } from "../avatar/HeroAvatar.tsx";
 
 const FADE_MS = 500;
@@ -34,13 +35,9 @@ export function GameScreen({ onBegin }: { onBegin: () => void }) {
       <h1 className="text-5xl font-bold tracking-tight">bop</h1>
       <p className="text-muted">Loosen your neck to the beat.</p>
 
-      <button
-        onClick={begin}
-        disabled={leaving}
-        className="mt-2 rounded-full bg-[#0d1117] px-8 py-3 text-lg font-semibold uppercase tracking-wide text-white shadow-lg shadow-black/20 transition hover:opacity-90"
-      >
+      <Button variant="primary" size="lg" onClick={begin} disabled={leaving} className="mt-2">
         Begin
-      </button>
+      </Button>
 
       <a
         href="#dev"
