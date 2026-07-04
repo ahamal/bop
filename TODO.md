@@ -2,9 +2,20 @@
 
 ## Next up
 
-- [ ] **Home avatar personality** — the hero avatar on the home page reads
-      robotic; give it some life (idle motion, blinks, small reactions —
-      something with character rather than a static rig).
+- [ ] **Home avatar personality** — the hero reads robotic because its idle is
+      pure fixed-period sinusoids. Agreed plan (2026-07-04), in payoff order:
+      1. Blinks: move the closed-eye dash meshes from `AbstractAvatar` into
+         `abstractParts.ts` so the hero can use them; blink every 2–6s
+         (randomized), ~120ms, occasional double-blink.
+      2. Replace the exact-2s nod with a randomized idle-action picker (every
+         4–10s: nod / side glance / small tilt / posture shift) with
+         asymmetric easing (fast out, slow settle, slight overshoot).
+      3. Signature move: slow ear-to-shoulder neck stretch (~every 20s, both
+         sides) — mascot demos the product.
+      4. Pointer awareness: lazy head-turn toward cursor near the avatar or
+         hovering Begin; dead zone so it "notices" rather than tracks.
+      Skip: constant cursor-following, yawns, extra geometry (fins/crown
+      experiment was tried and reverted — personality via timing, not parts).
 - [ ] **Minigames** — add head-tracked minigames on top of the routine engine
       (candidate ideas discussed: firefly keeper, metronome garden, pottery
       wheel, owl sentry; start as a `minigame` step kind reusing StackPlayer's
@@ -16,9 +27,22 @@
       movement instead of mimicking the player, and the recenter button is
       replaced by a pause button (nothing to recenter without tracking).
 
-- [ ] **Music & sound** — audio for the routine: ambient/backing track plus
-      cues (step complete, recenter landed, routine done). Needs a sound
-      direction pass first: calm-coach vs game-y.
+- [x] **Music & sound** — 13 Pixabay tracks in `public/music` (~78 MB, ships
+      with deploys), shuffled queue, plain-TS engine (`src/audio/player.ts`,
+      50% volume default), pill UI bottom-right that appears with the
+      camera→mesh slide; autoplay on slide, stop on exit. Synth SFX
+      (`src/audio/sfx.ts`, non-tonal noise taps): per-second hold ticks
+      (brighter last 3s), card-done tap, confetti celebration (foomp +
+      stereo crackle + glitter tail) with a music duck (-70% amplitude, 1.2s).
+- [ ] Sound polish: tick/tap levels against louder tracks; recenter-landed cue
+      still missing; `public/ambient-demo.html` (generative Web Audio sketch)
+      kept for reference — delete or move somewhere before public launch.
+- [x] **Set pips on repeated cards** — chin tuck cards show per-rep dots +
+      "n of m" (generic: any repeated hold step gets it automatically).
+- [x] **Face expression on the avatar** — mouth-open / per-eye-closed ratios
+      from face landmarks (`src/tracking/face.ts`, pure geometry, no extra
+      model pass; also on `FrameResult.expression`); abstract avatar shows a
+      mouth that scales open + translucent closed-eye dashes.
 - [x] **Scheduling** — reminder scheduler on the completion card
       (`ReminderScheduler.tsx`): "in 2 hours" default, dropdown for other hours /
       tomorrow / up to 3 days (day choices reveal a time field), dev-only
@@ -27,9 +51,8 @@
 ## Before merging to main (merge = deploy to bop.ashween.com)
 
 - [x] Commit the working tree (routine fixes, arc segments, reminder plumbing, `server/`) — `ae655a2`, pushed
-- [ ] **Restore the full routine** — `NECK_ROUTINE` in `src/game/routine.ts` is truncated
-      to still → look left → relax → look right for testing; swap `FULL_NECK_ROUTINE`
-      back in and delete the temp block
+- [x] **Restore the full routine** — `NECK_ROUTINE` is the full set again
+      (5 tuck sets); temp `TEST_ROUTINE` block deleted (2026-07-04)
 - [ ] Sanity pass of the whole flow start-to-finish once at full length
 
 ## Detection tuning (verify against the live dev readout)

@@ -93,7 +93,9 @@ export class Avatar {
     const key = new THREE.DirectionalLight(0xffffff, 0.9);
     key.position.set(2, 3, 4);
     this.scene.add(key);
-    const rim = new THREE.DirectionalLight(0x88aaff, 0.4);
+    // Rim strong enough that facet edges keep re-lighting as the head turns —
+    // with flat shading this is most of what makes rotation visible.
+    const rim = new THREE.DirectionalLight(0x88aaff, 0.6);
     rim.position.set(-3, 1, -2);
     this.scene.add(rim);
 

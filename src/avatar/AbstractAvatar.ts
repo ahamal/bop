@@ -14,8 +14,9 @@ import { Avatar } from "./avatar.ts";
 import type { FaceExpression } from "../tracking/face.ts";
 import { buildAbstractHead, buildAbstractTorso } from "./abstractParts.ts";
 
-// Dark inset material for mouth/eye shapes — reads as an opening in the emerald.
-const INSET = 0x11241c;
+// Inset material for mouth/eye shapes — a darker emerald (not black), so the
+// features read as shaded facets of the same crystal.
+const INSET = 0x0c6b4a;
 
 // Show a feature once its smoothed signal clears this (hysteresis comes free
 // from the render-loop smoothing).
@@ -46,17 +47,26 @@ export class AbstractAvatar extends Avatar {
     const head = buildAbstractHead();
     const inset = new THREE.MeshStandardMaterial({ color: INSET, roughness: 0.6 });
 
-    // Mouth: a flattened dark ellipsoid under the nose, scaled open per frame.
+    // Mouth: a flattened dark ellipsoid in the lower third of the face, well
+    // below the nose (nostrils end ~y 0.57), scaled open per frame.
     this.mouth = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), inset);
-    this.mouth.position.set(0, 0.5, 0.78);
+    this.mouth.position.set(0, 0.38, 0.8);
     this.mouth.visible = false;
     head.add(this.mouth);
 
-    // Closed-eye dashes: small horizontal capsules where eyes would sit.
+    // Closed-eye dashes: slim horizontal capsules, kept thin and translucent —
+    // at full size/opacity they read as heavy "angry brows" rather than gently
+    // shut eyes. Own material (not the mouth's) for the see-through look.
+    const eyeMat = new THREE.MeshStandardMaterial({
+      color: INSET,
+      roughness: 0.6,
+      transparent: true,
+      opacity: 0.5,
+    });
     for (const side of [-1, 1] as const) {
-      const dash = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.16, 4, 8), inset);
+      const dash = new THREE.Mesh(new THREE.CapsuleGeometry(0.014, 0.16, 4, 8), eyeMat);
       dash.rotation.z = Math.PI / 2;
-      dash.position.set(side * 0.34, 1.16, 0.76);
+      dash.position.set(side * 0.26, 0.88, 0.87);
       dash.visible = false;
       head.add(dash);
       if (side < 0) this.eyeDashL = dash;
@@ -69,8 +79,9 @@ export class AbstractAvatar extends Avatar {
   protected applyFace(f: FaceExpression): void {
     this.mouth.visible = f.mouthOpen > SHOW;
     if (this.mouth.visible) {
-      // Widen slightly and open vertically with the signal.
-      this.mouth.scale.set(0.22 + 0.08 * f.mouthOpen, 0.04 + 0.16 * f.mouthOpen, 0.08);
+      // Widen slightly and open vertically with the signal (capped so a full
+      // gape stays inside the lower third of the face).
+      this.mouth.scale.set(0.2 + 0.08 * f.mouthOpen, 0.04 + 0.1 * f.mouthOpen, 0.08);
     }
     this.eyeDashL.visible = f.leftEyeClosed > SHOW;
     this.eyeDashR.visible = f.rightEyeClosed > SHOW;

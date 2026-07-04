@@ -26,18 +26,7 @@ export type Step =
 const tuck = (): Step => ({ kind: "hold", label: "Tuck your chin in", state: "tuck", holdMs: 6000 });
 const relax = (): Step => ({ kind: "relax", label: "Relax, back to neutral", recenter: true });
 
-// TEMP(testing): a 2-exercise list so a full run takes under a minute — two
-// tuck sets, so the set pips are visible too. Point NECK_ROUTINE back at
-// FULL_NECK_ROUTINE when done testing.
-const TEST_ROUTINE: Step[] = [
-  { kind: "still", label: "Sit comfortably and hold still" },
-  tuck(), relax(),
-  tuck(),
-];
-
-export const NECK_ROUTINE: Step[] = TEST_ROUTINE;
-
-export const FULL_NECK_ROUTINE: Step[] = [
+export const NECK_ROUTINE: Step[] = [
   { kind: "still", label: "Sit comfortably and hold still" },
   // Chin tucks — activation, 5 reps.
   tuck(), relax(),
