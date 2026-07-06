@@ -10,6 +10,7 @@ import * as THREE from "three";
 
 export const ACCENT = 0x34d399; // brand emerald-400
 export const ACCENT_DEEP = 0x0f7a55; // deeper emerald for the torso
+export const INSET = 0x0c6b4a; // darker emerald for face features (mouth, eye dashes)
 
 /** Head + nose as a group, ready to add to a head pivot. */
 export function buildAbstractHead(): THREE.Group {
@@ -52,6 +53,29 @@ export function buildAbstractTorso(): THREE.Mesh {
   const torso = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 0.8, 1.6, 6), mat);
   torso.rotation.y = Math.PI / 6; // flat face forward
   return torso;
+}
+
+/**
+ * Closed-eye dashes: slim horizontal capsules, kept thin and translucent — at
+ * full size/opacity they read as heavy "angry brows" rather than gently shut
+ * eyes. Positioned for the abstract head; add both to the head group. Start
+ * hidden; the caller toggles `visible` from the eye-closed signal.
+ */
+export function buildEyeDashes(): { left: THREE.Mesh; right: THREE.Mesh } {
+  const mat = new THREE.MeshStandardMaterial({
+    color: INSET,
+    roughness: 0.6,
+    transparent: true,
+    opacity: 0.5,
+  });
+  const make = (side: -1 | 1): THREE.Mesh => {
+    const dash = new THREE.Mesh(new THREE.CapsuleGeometry(0.014, 0.16, 4, 8), mat);
+    dash.rotation.z = Math.PI / 2;
+    dash.position.set(side * 0.26, 0.88, 0.87);
+    dash.visible = false;
+    return dash;
+  };
+  return { left: make(-1), right: make(1) };
 }
 
 /** Dispose all geometries + materials under an object (for React unmount). */

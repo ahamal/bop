@@ -3,7 +3,7 @@
 // Mood is a name-based guess for now — "upbeat" drives the default game
 // playlist, "calm" is reserved for rest/cooldown states later.
 
-export type Mood = "upbeat" | "calm";
+export type Mood = "upbeat" | "calm" | "arcade";
 
 export interface Track {
   file: string;
@@ -35,4 +35,16 @@ export const TRACKS: readonly Track[] = [
   t("morgan-ambient-calm-ambient-dreamscape-529861.mp3", "Calm Dreamscape", "Morgan", "calm"),
   t("music_for_video-just-relax-11157.mp3", "Just Relax", "Music for Video", "calm"),
   t("the_mountain-relax-508021.mp3", "Relax", "The Mountain", "calm"),
+];
+
+// The arcade's own queue (public/music/games/) — chippy game music, kept out
+// of TRACKS so the routine's player never shuffles into 8-bit territory.
+export const ARCADE_TRACKS: readonly Track[] = [
+  t("games/alexgrohl-retro-electronic-535019.mp3", "Retro Electronic", "AlexGrohl", "arcade"),
+  t("games/bransboynd-retro-game-402454.mp3", "Retro Game", "Bransboynd", "arcade"),
+  t("games/djartmusic-best-game-console-301284.mp3", "Best Game Console", "DJARTMUSIC", "arcade"),
+  t("games/hitslab-gaming-game-video-game-music-474671.mp3", "Gaming", "HitsLab", "arcade"),
+  t("games/maksymmalko-game-minecraft-gaming-background-music-402451.mp3", "Gaming Background", "Maksym Malko", "arcade"),
+  t("games/maksymmalko-roblox-minecraft-fortnite-video-game-music-358426.mp3", "Video Game Music", "Maksym Malko", "arcade"),
+  t("games/poorartistt-game-is-on-video-game-music-no-copyright-426131.mp3", "Game Is On", "PoorArtistt", "arcade"),
 ];

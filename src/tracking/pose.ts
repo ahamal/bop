@@ -12,13 +12,13 @@ export interface HeadPose {
   /** Tilting ear-to-shoulder, degrees. */
   roll: number;
   /**
-   * Depth from the camera, in MediaPipe's metric units (larger = farther).
-   * This is the translation's Z component ALONE — not the full vector length —
-   * so sliding the head sideways/up doesn't masquerade as a depth change. That
-   * isolation matters for the chin-tuck signal, which is a small depth move.
-   * Use it as a ratio against a neutral reading, not as an absolute measurement.
-   * Drives the avatar + lean visuals. (The tuck signal is reconstructed in 3D
-   * from the pose model's world landmarks — see bodyTracker.ts — not from here.)
+   * Depth from the camera (larger = farther), in arbitrary units — use it as a
+   * ratio against a neutral reading, not as an absolute measurement. Seeded
+   * here from the matrix translation's Z, then OVERRIDDEN by the tracker with
+   * a yaw-corrected interocular estimate (see headTracker.ts): the matrix Z
+   * comes from a rigid whole-face fit, so jaw motion (mouth open) bled into
+   * it, while the eye corners are expression-invariant. Drives the avatar +
+   * lean visuals and the head side of the tuck signal.
    */
   distance: number;
   /**

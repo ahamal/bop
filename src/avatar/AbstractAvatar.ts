@@ -12,11 +12,12 @@
 import * as THREE from "three";
 import { Avatar } from "./avatar.ts";
 import type { FaceExpression } from "../tracking/face.ts";
-import { buildAbstractHead, buildAbstractTorso } from "./abstractParts.ts";
-
-// Inset material for mouth/eye shapes — a darker emerald (not black), so the
-// features read as shaded facets of the same crystal.
-const INSET = 0x0c6b4a;
+import {
+  INSET,
+  buildAbstractHead,
+  buildAbstractTorso,
+  buildEyeDashes,
+} from "./abstractParts.ts";
 
 // Show a feature once its smoothed signal clears this (hysteresis comes free
 // from the render-loop smoothing).
@@ -45,6 +46,8 @@ export class AbstractAvatar extends Avatar {
 
   protected buildHead(): void {
     const head = buildAbstractHead();
+    // Inset material for the mouth — a darker emerald (not black), so the
+    // feature reads as a shaded facet of the same crystal.
     const inset = new THREE.MeshStandardMaterial({ color: INSET, roughness: 0.6 });
 
     // Mouth: a flattened dark ellipsoid in the lower third of the face, well
@@ -54,24 +57,12 @@ export class AbstractAvatar extends Avatar {
     this.mouth.visible = false;
     head.add(this.mouth);
 
-    // Closed-eye dashes: slim horizontal capsules, kept thin and translucent —
-    // at full size/opacity they read as heavy "angry brows" rather than gently
-    // shut eyes. Own material (not the mouth's) for the see-through look.
-    const eyeMat = new THREE.MeshStandardMaterial({
-      color: INSET,
-      roughness: 0.6,
-      transparent: true,
-      opacity: 0.5,
-    });
-    for (const side of [-1, 1] as const) {
-      const dash = new THREE.Mesh(new THREE.CapsuleGeometry(0.014, 0.16, 4, 8), eyeMat);
-      dash.rotation.z = Math.PI / 2;
-      dash.position.set(side * 0.26, 0.88, 0.87);
-      dash.visible = false;
-      head.add(dash);
-      if (side < 0) this.eyeDashL = dash;
-      else this.eyeDashR = dash;
-    }
+    // Closed-eye dashes from the shared builder (also used by the hero's
+    // blinks). left = screen-left = the person's left eye in the mirror view.
+    const dashes = buildEyeDashes();
+    head.add(dashes.left, dashes.right);
+    this.eyeDashL = dashes.left;
+    this.eyeDashR = dashes.right;
 
     this.headPivot.add(head);
   }

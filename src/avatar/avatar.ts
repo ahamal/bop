@@ -37,7 +37,9 @@ const TORSO_ZOOM_K = 0.08;
 
 export class Avatar {
   private renderer: THREE.WebGLRenderer;
-  private scene = new THREE.Scene();
+  // Protected so game subclasses can add scene content (e.g. Chomp's falling
+  // snacks) that isn't part of the figure itself.
+  protected scene = new THREE.Scene();
   protected camera: THREE.PerspectiveCamera;
   // Protected so subclasses (e.g. AbstractAvatar) can add their own geometry to
   // these groups; all the pose-driving machinery below stays shared.

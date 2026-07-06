@@ -39,6 +39,75 @@
   }
 }
 
+/* Generic fade-in for elements that mount late (e.g. the arcade's Recenter). */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Arcade cutscene cards: one animation spans the card's whole on-screen life
+   (sized to the director's phase length via animation-duration) — flash in
+   fast, hold, flash out. */
+@keyframes arcade-card {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  12%,
+  86% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+}
+
+/* The changed stat on the stats card: the new level digit rolls up into
+   place; a just-lost heart pops before settling grey. */
+@keyframes arcade-rollup {
+  from {
+    transform: translateY(0.6em);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes arcade-heart-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.6);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Result stinger text ("NICE!" / "MISS!"): overshoot pop-in. */
+@keyframes arcade-pop {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 @layer base {
   body {
     background-color: var(--color-bg);

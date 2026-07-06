@@ -77,6 +77,24 @@ export function playTick(nearEnd = false): void {
   tap(0, nearEnd ? 3000 : 2200, 0.03, nearEnd ? 0.4 : 0.25);
 }
 
+/** Microgame lost: a rounded low "duh" — a smaller, darker cousin of the
+ *  celebrate foomp, capped with a dull knock. Reads instantly as "life gone"
+ *  next to the bright rising playDone, still melody-free. */
+export function playFail(): void {
+  const ac = audioCtx();
+  const t = ac.currentTime;
+  const o = ac.createOscillator();
+  o.frequency.setValueAtTime(140, t);
+  o.frequency.exponentialRampToValueAtTime(55, t + 0.16);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.32, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+  o.connect(g).connect(ac.destination);
+  o.start(t);
+  o.stop(t + 0.3);
+  tap(0.02, 700, 0.06, 0.3);
+}
+
 /** A single confetti "pop" — like tap() but panned, so the crackle spreads
  *  across the stereo field. */
 function pop(at: number, freq: number, gain: number, pan: number): void {

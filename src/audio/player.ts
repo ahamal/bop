@@ -3,7 +3,7 @@
 // changes (track switch, play/pause), so the React shell just re-renders a
 // label and an icon. Volume defaults to 50%.
 
-import { TRACKS, type Track } from "./playlist.ts";
+import { ARCADE_TRACKS, TRACKS, type Track } from "./playlist.ts";
 
 export interface PlayerState {
   track: Track;
@@ -143,5 +143,7 @@ function shuffle(tracks: readonly Track[]): Track[] {
   return out;
 }
 
-// The queue is shuffled on load and reshuffled each time it's exhausted.
+// Each queue is shuffled on load and reshuffled when exhausted. One player per
+// context — the routine and the arcade never share a queue or a paused state.
 export const musicPlayer = new MusicPlayer(TRACKS);
+export const arcadeMusicPlayer = new MusicPlayer(ARCADE_TRACKS);

@@ -26,27 +26,35 @@ export type Step =
 const tuck = (): Step => ({ kind: "hold", label: "Tuck your chin in", state: "tuck", holdMs: 6000 });
 const relax = (): Step => ({ kind: "relax", label: "Relax, back to neutral", recenter: true });
 
+// Ordered easy → harder: gentle ROM holds warm the neck up, the chin tucks
+// (precision work) come once it's moving, and the rolls flow out as cooldown.
 export const NECK_ROUTINE: Step[] = [
   { kind: "still", label: "Sit comfortably and hold still" },
-  // Chin tucks — activation, 5 reps.
-  tuck(), relax(),
-  tuck(), relax(),
-  tuck(), relax(),
-  tuck(), relax(),
-  tuck(), relax(),
-  // Range-of-motion holds, each preceded by a relax/re-zero.
-  { kind: "hold", label: "Tilt your left ear to your shoulder", state: "tiltLeft", holdMs: 20000 },
+  // Range-of-motion holds, each followed by a relax/re-zero. Free tilts and
+  // looks first; the hand-assisted tilts (gentle overpressure is what makes
+  // the tilt stretch effective) come back around once the neck is warm.
+  { kind: "hold", label: "Tilt your left ear to your shoulder", state: "tiltLeft", holdMs: 6000 },
   relax(),
-  { kind: "hold", label: "Tilt your right ear to your shoulder", state: "tiltRight", holdMs: 20000 },
+  { kind: "hold", label: "Tilt your right ear to your shoulder", state: "tiltRight", holdMs: 6000 },
   relax(),
-  { kind: "hold", label: "Look over your left shoulder", state: "lookLeft", holdMs: 20000 },
+  { kind: "hold", label: "Look over your left shoulder", state: "lookLeft", holdMs: 15000 },
   relax(),
-  { kind: "hold", label: "Look over your right shoulder", state: "lookRight", holdMs: 20000 },
+  { kind: "hold", label: "Look over your right shoulder", state: "lookRight", holdMs: 15000 },
+  relax(),
+  { kind: "hold", label: "Tilt left, left hand on head, right arm hanging", state: "tiltLeft", holdMs: 20000 },
+  relax(),
+  { kind: "hold", label: "Tilt right, right hand on head, left arm hanging", state: "tiltRight", holdMs: 20000 },
   relax(),
   { kind: "hold", label: "Lower your chin to your chest", state: "lookDown", holdMs: 20000 },
   relax(),
   { kind: "hold", label: "Gently look up", state: "lookUp", holdMs: 5000 },
   relax(),
+  // Chin tucks — precision/strength work, 5 reps, saved for a warmed-up neck.
+  tuck(), relax(),
+  tuck(), relax(),
+  tuck(), relax(),
+  tuck(), relax(),
+  tuck(), relax(),
   // Flowing cooldown: one card per half-circle pass.
   { kind: "roll", label: "Slow half circle, left ear to chest to right", dir: 1 },
   { kind: "roll", label: "And back, right ear to chest to left", dir: -1 },

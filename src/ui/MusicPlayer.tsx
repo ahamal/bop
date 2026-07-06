@@ -13,10 +13,11 @@ const EQ_DELAYS = ["0s", "-0.35s", "-0.7s"];
 const GHOST_BTN =
   "flex h-7 w-7 flex-none items-center justify-center rounded-full text-muted transition hover:bg-black/5 hover:text-text dark:hover:bg-white/10";
 
-export function MusicPlayer() {
-  const [{ track, playing, volume }, setState] = useState(musicPlayer.state);
+// Defaults to the routine's player; the arcade passes its own instance.
+export function MusicPlayer({ player = musicPlayer }: { player?: typeof musicPlayer }) {
+  const [{ track, playing, volume }, setState] = useState(player.state);
 
-  useEffect(() => musicPlayer.subscribe(setState), []);
+  useEffect(() => player.subscribe(setState), [player]);
 
   return (
     <div className="group flex items-center gap-2.5 rounded-full bg-panel py-1.5 pl-3.5 pr-1.5">
@@ -46,20 +47,20 @@ export function MusicPlayer() {
           step={0.01}
           value={volume}
           aria-label="Music volume"
-          onChange={(e) => musicPlayer.setVolume(e.target.valueAsNumber)}
+          onChange={(e) => player.setVolume(e.target.valueAsNumber)}
           className="h-1 w-full accent-(--color-accent)"
         />
       </div>
 
       <button
-        onClick={() => musicPlayer.toggle()}
+        onClick={() => player.toggle()}
         aria-label={playing ? "Pause music" : "Play music"}
         className={GHOST_BTN}
       >
         {playing ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4 pl-px" />}
       </button>
       <button
-        onClick={() => musicPlayer.next()}
+        onClick={() => player.next()}
         aria-label="Next track"
         className={`-ml-1.5 ${GHOST_BTN}`}
       >

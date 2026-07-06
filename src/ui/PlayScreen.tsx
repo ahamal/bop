@@ -17,7 +17,8 @@
 import { useEffect, useRef, useState } from "react";
 import * as Switch from "@radix-ui/react-switch";
 import { VideoCameraIcon, ExclamationTriangleIcon, ArrowLeftIcon } from "@heroicons/react/24/outline";
-import { SettingsMenu } from "./SettingsMenu.tsx";
+import { ThemeIconButton } from "./ThemeIconButton.tsx";
+import { cameraErrorMessage } from "./cameraError.ts";
 import { Button } from "./Button.tsx";
 import { ConfettiBurst } from "./ConfettiBurst.tsx";
 import { ReminderScheduler } from "./ReminderScheduler.tsx";
@@ -412,7 +413,7 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
       }`}
     >
       <div className="absolute right-4 top-4">
-        <SettingsMenu />
+        <ThemeIconButton />
       </div>
 
       {/* Back to home — the unmount effect stops the session/camera. */}
@@ -676,23 +677,6 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
       </div>
     </div>
   );
-}
-
-// Turn a getUserMedia / model-load failure into a short, human message.
-function cameraErrorMessage(err: unknown): string {
-  if (err instanceof DOMException) {
-    switch (err.name) {
-      case "NotAllowedError":
-      case "SecurityError":
-        return "Camera access was blocked. Allow it in your browser and try again.";
-      case "NotFoundError":
-      case "OverconstrainedError":
-        return "No camera was found on this device.";
-      case "NotReadableError":
-        return "The camera is in use by another app.";
-    }
-  }
-  return err instanceof Error ? err.message : "Something went wrong starting the camera.";
 }
 
 // Draw the face landmarks + shoulder line for the current frame onto the

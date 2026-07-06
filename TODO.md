@@ -2,24 +2,42 @@
 
 ## Next up
 
-- [ ] **Home avatar personality** — the hero reads robotic because its idle is
-      pure fixed-period sinusoids. Agreed plan (2026-07-04), in payoff order:
-      1. Blinks: move the closed-eye dash meshes from `AbstractAvatar` into
-         `abstractParts.ts` so the hero can use them; blink every 2–6s
-         (randomized), ~120ms, occasional double-blink.
-      2. Replace the exact-2s nod with a randomized idle-action picker (every
-         4–10s: nod / side glance / small tilt / posture shift) with
-         asymmetric easing (fast out, slow settle, slight overshoot).
-      3. Signature move: slow ear-to-shoulder neck stretch (~every 20s, both
-         sides) — mascot demos the product.
-      4. Pointer awareness: lazy head-turn toward cursor near the avatar or
-         hovering Begin; dead zone so it "notices" rather than tracks.
-      Skip: constant cursor-following, yawns, extra geometry (fins/crown
-      experiment was tried and reverted — personality via timing, not parts).
-- [ ] **Minigames** — add head-tracked minigames on top of the routine engine
-      (candidate ideas discussed: firefly keeper, metronome garden, pottery
-      wheel, owl sentry; start as a `minigame` step kind reusing StackPlayer's
-      frame/snapshot pattern, canvas playfield layer, React for chrome only).
+- [x] **Home avatar personality** — implemented (2026-07-04) as an `IdleBrain`
+      (`src/avatar/idleBrain.ts`, plain TS) layered over the hero's base sway:
+      the character is an energetic person doing neck exercises — actions run
+      in REPS (double nod, glance L-R, tilt both sides, posture shift) with
+      smooth bell-shaped easing (easeInOutCubic, no overshoot), a new set
+      1.2–3.2s after the last ends; deep ear-to-shoulder stretch (both sides,
+      one set) every ~16–26s; pointer awareness (attend radius 1.6
+      canvas-widths, 0.09 dead zone, ~0.3s turn constant, loses interest after
+      2s of stillness; suppresses new actions while attending). Reduced-motion
+      disables the brain. Tuning lesson: energy must come from cadence and
+      full movements, never sudden onset — fast-attack + overshoot easing read
+      as menacing twitches, and slow easing read as sluggish; both reverted. Skipped by
+      design: constant cursor-following, yawns, extra geometry; blinks were
+      built then removed (eye dashes flashing on the featureless hero read
+      wrong) — `buildEyeDashes()` stays in `abstractParts.ts` for the play
+      avatar's closed-eye look.
+- [ ] Hero personality tuning pass: eyeball action frequency/amplitudes and the
+      pointer attend feel in the dev server; tune constants in `idleBrain.ts`
+- [ ] **Minigames** — WarioWare-style arcade (2026-07-05): `ArcadeScreen` owns
+      ONE TrackingSession for the whole arcade — camera + models load on the
+      index, calibrate once, stay live across game switches; the active game
+      registers a `FrameSink` (FrameResult + dt) and attaches its own avatar
+      (`session.detachAvatar()` added for the release). All future games use
+      this same input contract.
+      Lineup picked 2026-07-04 (fun-vs-effort ranking): Chomp
+      (catch/eat, BUILT — see below), "bop says" (Simon with gesture detection,
+      cheapest next), Gorillas-style banana lob (turn-based = latency-proof,
+      aiming = ROM holds), rhythm (highest ceiling; prototype input latency
+      before committing). Cut: pottery wheel (precision on the weakest axis),
+      flappy-nod (neck-hostile), paratrooper (outclassed by the lob).
+      - [x] Chomp v2: playfield is the real 3D scene — `ChompAvatar`
+        (AbstractAvatar in a slide group, mouth mirrors the player) + faceted
+        low-poly 3D snacks tumbling in the same scene (`chomp.ts` owns state +
+        snack meshes; avatar's loop renders). Recenter button on the screen.
+        v1's 2D-canvas face was boring — the 3D mascot IS the draw. Tune
+        YAW_RANGE_DEG / MOUTH_EAT / speeds / EAT_R on a real webcam run.
 
 - [ ] **No-camera mode (privacy)** — home screen gets two buttons: "Begin with
       camera" and "Begin without camera". Without-camera is a guided-only run:
@@ -82,7 +100,9 @@
 - [ ] PWA manifest + icons → installable, and required for iOS push at all
 - [ ] Notification icon: add an `icon` to `showNotification` in `public/sw.js`
       (currently shows the browser default)
-- [ ] Favicon / page title / meta for the public site
+- [ ] Favicon for the public site (title "bop" + meta description — "Guided
+      neck exercises, tracked by your webcam." — are in index.html; OpenGraph
+      tags still missing if link previews matter)
 - [ ] Personal homepage → ashween.com: placeholder scaffolded at
       `~/Desktop/work/ashween.com` (git-initialized, uncommitted) — create the
       GitHub repo, push, connect to Pages (no build step, output `/`), attach

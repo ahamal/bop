@@ -4,6 +4,7 @@
 // per-frame lives below in the engine.
 
 import { useState, useSyncExternalStore } from "react";
+import { ArcadeScreen } from "./ArcadeScreen.tsx";
 import { DevScreen } from "./DevScreen.tsx";
 import { GameScreen } from "./GameScreen.tsx";
 import { PlayScreen } from "./PlayScreen.tsx";
@@ -22,9 +23,17 @@ function route(): string {
 export function App() {
   const current = useSyncExternalStore(subscribe, route);
   useApplyTheme(useSettings().theme);
-  // The play screen is app state (not a bookmarkable route); only #dev routes.
-  const [playing, setPlaying] = useState(false);
+  // Play and the arcade are app state (not bookmarkable routes); only #dev
+  // routes. The arcade owns picker ↔ game internally so its camera session
+  // survives game switches.
+  const [screen, setScreen] = useState<"home" | "play" | "minigames">("home");
   if (current === "dev") return <DevScreen />;
-  if (playing) return <PlayScreen onExit={() => setPlaying(false)} />;
-  return <GameScreen onBegin={() => setPlaying(true)} />;
+  if (screen === "play") return <PlayScreen onExit={() => setScreen("home")} />;
+  if (screen === "minigames") return <ArcadeScreen onExit={() => setScreen("home")} />;
+  return (
+    <GameScreen
+      onBegin={() => setScreen("play")}
+      onMinigames={() => setScreen("minigames")}
+    />
+  );
 }

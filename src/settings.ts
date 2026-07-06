@@ -3,60 +3,38 @@
 // while the UI subscribes through the useSettings hook. The store holds a single
 // immutable Settings object and swaps it on every change, so getSnapshot returns
 // a stable reference between changes (what useSyncExternalStore needs).
+//
+// Down to just the theme: music/volume moved into the music player itself and
+// the old settings menu was removed with them (breathing guide went unused).
 
 export type ThemePref = "light" | "dark" | "system";
 
 export interface Settings {
-  /** Master volume, 0..1. */
-  volume: number;
-  /** Selected music track id (see MUSIC_TRACKS). */
-  music: string;
-  /** Whether the breathing-pacing guide is shown. */
-  breathing: boolean;
   /** Light/dark preference; "system" follows the OS. */
   theme: ThemePref;
 }
 
-// Placeholder track list — the game's audio layer will map these ids to real
-// files + charts. Labels are what the menu shows.
-export const MUSIC_TRACKS: { value: string; label: string }[] = [
-  { value: "calm", label: "Calm" },
-  { value: "upbeat", label: "Upbeat" },
-  { value: "focus", label: "Focus" },
-];
-
-export const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "system", label: "System" },
-];
+const THEMES: readonly ThemePref[] = ["light", "dark", "system"];
 
 const DEFAULTS: Settings = {
-  volume: 0.8,
-  music: "calm",
-  breathing: true,
   theme: "system",
 };
 
 // Shared with the anti-flash inline script in index.html — keep in sync.
 export const SETTINGS_STORAGE_KEY = "bop:settings";
 
-function sanitize(s: Settings): Settings {
+// Rebuild field-by-field: drops stale keys from older stored versions and
+// falls back per-field on invalid values.
+function sanitize(s: Partial<Settings>): Settings {
   return {
-    ...s,
-    volume: Math.min(1, Math.max(0, Number(s.volume) || 0)),
+    theme: THEMES.includes(s.theme as ThemePref) ? (s.theme as ThemePref) : DEFAULTS.theme,
   };
 }
 
 function load(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<Settings>;
-      // Merge over defaults so a stored object from an older version (missing
-      // keys) still yields a complete, valid Settings.
-      return sanitize({ ...DEFAULTS, ...parsed });
-    }
+    if (raw) return sanitize(JSON.parse(raw) as Partial<Settings>);
   } catch {
     // Malformed JSON or unavailable storage — fall back to defaults.
   }

@@ -32,6 +32,17 @@ import type { HeadPose } from "./pose.ts";
 
 const CALIB_MS = 1500; // initial hold-still window
 const RECENTER_MS = 700; // shorter window when Recentering
+// Ignore the first frames after the camera opens: auto-exposure is still
+// settling and the tracker's first reads are jumpy, so sampling them skewed
+// the initial neutral (the "starts out of whack" recentering). Recenter skips
+// this — the stream is warm and the user is already settled.
+const CALIB_SETTLE_MS = 800;
+// Per-frame angle delta (|Δyaw|+|Δpitch|+|Δroll|, deg) above which the head
+// counts as moving during calibration. Movement restarts the window: neutral
+// must come from a genuinely still pose, not the average of settling in —
+// that averaged-motion neutral was why tracking started skewed until a manual
+// recenter (done while actually still) fixed it.
+const CALIB_STILL_DEG = 2.5;
 const CALIB_MIN_SAMPLES = 10; // don't finalize until this many head reads land
 const BODY_MIN_CONFIDENCE = 0.5; // shoulders below this don't back a depth read
 
@@ -116,8 +127,15 @@ export class TrackingSession {
   // neutral capture and Recenter (a shorter re-capture).
   private calib = new Calibrator();
   private calibrating = false;
+  private calibSampleStart = 0; // frames before this are warm-up, not samples
   private calibEndTime = 0;
   private calibIsRecenter = false;
+  private calibPrevPose: HeadPose | null = null; // last pose, for the stillness check
+  // False until the FIRST calibration lands. Until then the avatar is held in
+  // its rest posture — there's no trustworthy neutral to be relative to, so
+  // driving it would just replay the settling-in wobble. Recenters (neutral
+  // already exists) keep the avatar live.
+  private hasNeutral = false;
 
   private running = false;
   private fps = 0;
@@ -146,7 +164,19 @@ export class TrackingSession {
     AvatarCtor: new (canvas: HTMLCanvasElement) => Avatar = Avatar,
   ): Avatar {
     this.avatar = new AvatarCtor(canvas);
+    // An avatar attached mid-session (the arcade swapping playfields) must
+    // inherit the body neutral captured at calibration — setBody measures
+    // sway/lift against it, and a fresh avatar's zero neutral would draw the
+    // torso at the player's absolute camera position, off-center.
+    if (this.bodyNeutral) this.avatar.calibrateBody(this.bodyNeutral);
     return this.avatar;
+  }
+
+  /** Tear down the current avatar without stopping the session — for screens
+   * that swap playfields (e.g. the arcade) while the camera keeps running. */
+  detachAvatar(): void {
+    this.avatar?.dispose();
+    this.avatar = null;
   }
 
   /** Mirror the webcam into this canvas each frame (a preview sink). */
@@ -210,8 +240,11 @@ export class TrackingSession {
     this.calib.reset();
     this.calibrating = true;
     this.calibIsRecenter = isRecenter;
+    this.calibPrevPose = null;
+    this.calibSampleStart =
+      performance.now() + (isRecenter ? 0 : CALIB_SETTLE_MS);
     this.calibEndTime =
-      performance.now() + (isRecenter ? RECENTER_MS : CALIB_MS);
+      this.calibSampleStart + (isRecenter ? RECENTER_MS : CALIB_MS);
     this.status(
       isRecenter
         ? "Hold still — recentering…"
@@ -221,6 +254,7 @@ export class TrackingSession {
 
   private finishCalibration(): void {
     this.calibrating = false;
+    this.hasNeutral = true;
     // Start gameplay clean: clear armed states and the depth filter so a
     // pre-calibration transient can't fire a phantom gesture on the first frame.
     this.detector.reset();
@@ -242,7 +276,7 @@ export class TrackingSession {
     let freshBody: BodyPose | null = null;
     const body = this.bodyTracker.detect(video, now);
     if (body) {
-      this.avatar?.setBody(body);
+      if (this.hasNeutral) this.avatar?.setBody(body);
       this.latestBody = body;
       if (body.confidence >= BODY_MIN_CONFIDENCE) freshBody = body;
     }
@@ -250,21 +284,40 @@ export class TrackingSession {
     const frame = this.tracker.detect(video, now);
     if (frame) {
       if (this.calibrating) {
-        // Accumulate the resting pose and keep neutral on the running mean, so
-        // the avatar stays centered through the window and lands on the full
-        // average. Body neutral tracks the same way when shoulders read.
-        this.calib.addHead(frame.pose);
-        this.neutral = this.calib.headMean()!;
-        if (freshBody) {
-          this.calib.addBody(freshBody);
-          const bm = this.calib.bodyMean();
-          if (bm) {
-            this.bodyNeutral = bm;
-            this.avatar?.calibrateBody(bm);
+        const prev = this.calibPrevPose;
+        this.calibPrevPose = frame.pose;
+        const moved = prev
+          ? Math.abs(frame.pose.yaw - prev.yaw) +
+            Math.abs(frame.pose.pitch - prev.pitch) +
+            Math.abs(frame.pose.roll - prev.roll)
+          : 0;
+        if (now < this.calibSampleStart) {
+          // Warm-up: don't sample, but pin neutral to the live pose so a
+          // visible avatar rests centered instead of swinging on a stale zero.
+          this.neutral = frame.pose;
+        } else if (moved > CALIB_STILL_DEG) {
+          // Still moving — throw the window away and wait for a still head.
+          this.calib.reset();
+          this.calibEndTime =
+            now + (this.calibIsRecenter ? RECENTER_MS : CALIB_MS);
+          this.neutral = frame.pose;
+        } else {
+          // Accumulate the resting pose and keep neutral on the running mean,
+          // so the avatar stays centered through the window and lands on the
+          // full average. Body neutral tracks the same way when shoulders read.
+          this.calib.addHead(frame.pose);
+          this.neutral = this.calib.headMean()!;
+          if (freshBody) {
+            this.calib.addBody(freshBody);
+            const bm = this.calib.bodyMean();
+            if (bm) {
+              this.bodyNeutral = bm;
+              this.avatar?.calibrateBody(bm);
+            }
           }
-        }
-        if (now >= this.calibEndTime && this.calib.headCount >= CALIB_MIN_SAMPLES) {
-          this.finishCalibration();
+          if (now >= this.calibEndTime && this.calib.headCount >= CALIB_MIN_SAMPLES) {
+            this.finishCalibration();
+          }
         }
       }
 
@@ -272,10 +325,13 @@ export class TrackingSession {
       // Zoom (matrix-Z ratio) drives the avatar + lean meter — fine for visuals.
       const zoom =
         frame.pose.distance > 0 ? this.neutral.distance / frame.pose.distance : 1;
-      this.avatar?.setPose(rel);
-      this.avatar?.setZoom(zoom);
+      // Rest posture until the first neutral lands; live from then on.
+      if (this.hasNeutral) {
+        this.avatar?.setPose(rel);
+        this.avatar?.setZoom(zoom);
+      }
       const expression = computeExpression(frame.landmarks);
-      if (expression) this.avatar?.setFace(expression);
+      if (expression && this.hasNeutral) this.avatar?.setFace(expression);
 
       const m = computeMetrics(rel, zoom, freshBody, this.bodyNeutral);
       const events = this.calibrating ? [] : this.detector.update(m, now);
