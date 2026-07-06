@@ -31,7 +31,7 @@ export const GAMES_PER_ROUND = 8;
 export const MAX_LEVEL = 5;
 export const START_LIVES = 4;
 
-export type ArcadePhase =
+type ArcadePhase =
   | "nod-wait"
   | "stats"
   | "prompt"

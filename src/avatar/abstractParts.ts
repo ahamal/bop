@@ -9,7 +9,7 @@
 import * as THREE from "three";
 
 export const ACCENT = 0x34d399; // brand emerald-400
-export const ACCENT_DEEP = 0x0f7a55; // deeper emerald for the torso
+export const ACCENT_DEEP = 0x0f7a55; // deeper emerald for the torso (and limbs)
 export const INSET = 0x0c6b4a; // darker emerald for face features (mouth, eye dashes)
 
 /** Head + nose as a group, ready to add to a head pivot. */
@@ -84,6 +84,56 @@ export function buildEyeDashes(): { left: THREE.Mesh; right: THREE.Mesh } {
     return dash;
   };
   return { left: make(-1), right: make(1) };
+}
+
+/**
+ * Sunglasses: two faceted hexagonal lenses + a bridge + temple arms, sized for
+ * the abstract head (lenses centered on the eye-dash positions). Returned as
+ * one group so callers can toggle `visible` as a flag.
+ */
+export function buildSunglasses(): THREE.Group {
+  // Frame: near-black and glossy.
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x14181f,
+    roughness: 0.15,
+    metalness: 0.5,
+    flatShading: true,
+  });
+  // Lenses: same tint but see-through — smoked glass, so the eye dashes stay
+  // faintly visible behind them.
+  const lensMat = new THREE.MeshStandardMaterial({
+    color: 0x05070a,
+    roughness: 0.15,
+    metalness: 0.5,
+    transparent: true,
+    opacity: 0.8,
+  });
+  const group = new THREE.Group();
+
+  // Lenses: big, thin round discs facing +Z (cylinder axis rotated onto Z).
+  // Held well forward of the face — the head's widest facet at the eye line is
+  // ≈0.91, so a lens plane at z 1.0 clears it with margin even at the edges.
+  for (const side of [-1, 1] as const) {
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.012, 24), lensMat);
+    lens.rotation.x = Math.PI / 2;
+    lens.position.set(side * 0.28, 0.88, 1.08);
+    group.add(lens);
+
+    // Temple arm: from the lens's outer edge (±0.54, z 1.08) back to the side
+    // of the head at the ear line (±0.9, z 0) — angled, so it stays outside
+    // the skull the whole way instead of tunneling through it.
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.045, 1.14), mat);
+    arm.position.set(side * 0.72, 0.92, 0.54);
+    arm.rotation.y = -side * 0.32;
+    group.add(arm);
+  }
+
+  // Bridge across the nose, at the lens plane.
+  const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.045, 0.045), mat);
+  bridge.position.set(0, 0.92, 1.07);
+  group.add(bridge);
+
+  return group;
 }
 
 /** Dispose all geometries + materials under an object (for React unmount). */

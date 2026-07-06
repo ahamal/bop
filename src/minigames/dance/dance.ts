@@ -26,10 +26,10 @@
 // intended: "return to center" is the rest between moves, not a trick.
 
 import * as THREE from "three";
-import type { FrameResult, TrackingSession } from "../tracking/session.ts";
-import type { Level, Microgame, MicrogameDef } from "./registry.ts";
-import { playTick } from "../audio/sfx.ts";
-import { DanceAvatar } from "./danceAvatar.ts";
+import type { FrameResult, TrackingSession } from "../../tracking/session.ts";
+import type { Level, Microgame, MicrogameDef } from "../registry.ts";
+import { playTick } from "../../audio/sfx.ts";
+import { DanceAvatar } from "./avatar.ts";
 
 type DanceMove = "lookLeft" | "lookRight" | "tiltLeft" | "tiltRight" | "center";
 
@@ -98,7 +98,7 @@ interface Dancer {
   dir: 1 | -1; // alternate rock phase across the row
 }
 
-export class DanceGame implements Microgame {
+class DanceGame implements Microgame {
   private _outcome: "pending" | "win" | "lose" = "pending";
   private t = 0;
   private beatMs: number;
@@ -448,7 +448,7 @@ export const danceDef: MicrogameDef = {
   prompt: { lead: "copy the", action: "DANCE" },
   hint: "do the falling move when it reaches the slot · ◎ = back to center",
   create(canvas, session, level) {
-    const avatar = session.attachAvatar(canvas, DanceAvatar) as DanceAvatar;
+    const avatar = session.attachAvatar(canvas, DanceAvatar);
     // The playfield div (the canvas's positioned parent) hosts the 2D panel.
     return new DanceGame(avatar, session, level, canvas.parentElement!);
   },

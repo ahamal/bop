@@ -38,8 +38,10 @@ interface ActionSpec {
 }
 
 const ACTIONS: ActionSpec[] = [
-  // Double nod — a full "yes-yes", same direction both reps.
-  { weight: 3, attack: 0.28, hold: 0.05, settle: 0.34, reps: 2, gap: 0.1, pitch: 0.35 },
+  // Double bow — deeper and more deliberate than a "yes-yes" nod: a fuller dip
+  // with a beat at the bottom, so with the torso's follow-through (the hero's
+  // render loop leans the body at a fraction of pitch) it reads as a little bow.
+  { weight: 3, attack: 0.48, hold: 0.22, settle: 0.55, reps: 2, gap: 0.15, pitch: 0.52 },
   // Glance left then right, like checking form in a mirror.
   { weight: 2, attack: 0.38, hold: 0.35, settle: 0.38, reps: 2, alternate: true, gap: 0.15, yaw: 0.5, mirror: true },
   // Tilt both sides — a light warm-up version of the stretch.

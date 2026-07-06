@@ -20,11 +20,11 @@
 // through its range instead of rewarding center-hovering.
 
 import * as THREE from "three";
-import type { FrameResult, TrackingSession } from "../tracking/session.ts";
-import type { Level, Microgame, MicrogameDef } from "./registry.ts";
-import { playTick } from "../audio/sfx.ts";
-import { soccerBallFactory, type PropFactory } from "./props.ts";
-import { ChompAvatar, ITEM_Z, MOUTH_Y } from "./chompAvatar.ts";
+import type { FrameResult, TrackingSession } from "../../tracking/session.ts";
+import type { Level, Microgame, MicrogameDef } from "../registry.ts";
+import { playTick } from "../../audio/sfx.ts";
+import { soccerBallFactory, type PropFactory } from "../props.ts";
+import { ChompAvatar, ITEM_Z, MOUTH_Y } from "./avatar.ts";
 
 // Shoulder tilt (deg) that reaches the slide bound — a comfortable lean, not a
 // stretch. Steering is torso-only: metrics.torsoTilt is relative to the
@@ -64,7 +64,7 @@ interface Item {
   eatMs: number;
 }
 
-export class ChompMicrogame implements Microgame {
+class ChompMicrogame implements Microgame {
   private _outcome: "pending" | "win" | "lose" = "pending";
   private score = 0;
   private items: Item[] = [];
@@ -413,7 +413,7 @@ export const chompDef: MicrogameDef = {
   prompt: { lead: "open wide and", action: "EAT" },
   hint: "lean to slide · chomp the fruit · don't eat the junk",
   create(canvas, session, level) {
-    const avatar = session.attachAvatar(canvas, ChompAvatar) as ChompAvatar;
+    const avatar = session.attachAvatar(canvas, ChompAvatar);
     return new ChompMicrogame(avatar, session, level);
   },
 };

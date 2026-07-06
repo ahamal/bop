@@ -3,7 +3,7 @@
 // together. The dev page (#dev) keeps the real tracking UI.
 
 import { useState } from "react";
-import { ChevronRightIcon, WrenchScrewdriverIcon } from "@heroicons/react/24/outline";
+import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import { ThemeIconButton } from "./ThemeIconButton.tsx";
 import { Button } from "./Button.tsx";
 import { HeroAvatar } from "../avatar/HeroAvatar.tsx";
@@ -42,6 +42,14 @@ export function GameScreen({
 
       <h1 className="text-5xl font-bold tracking-tight">bop</h1>
       <p className="text-muted">Guided neck exercises, tracked by your webcam.</p>
+      {/* Pull the hook up under the tagline — one intro block, not two floating lines. */}
+      <p className="-mt-4 max-w-md text-center text-muted">
+        Stop the silent pandemic of{" "}
+        <a href="#science" className="underline underline-offset-2 transition hover:text-text">
+          tech neck
+        </a>
+        .
+      </p>
 
       <div className="mt-2 flex flex-col items-center gap-3">
         <Button
@@ -65,14 +73,19 @@ export function GameScreen({
         </Button>
       </div>
 
-      <a
-        href="#dev"
-        aria-label="Dev diagnostics"
-        title="Dev diagnostics"
-        className="absolute bottom-4 left-4 inline-flex items-center text-muted transition hover:text-text"
-      >
-        <WrenchScrewdriverIcon className="h-5 w-5" />
-      </a>
+      {/* Footer nav: the static pages, plus dev diagnostics, as quiet text links. */}
+      <nav className="absolute bottom-4 inset-x-0 flex items-center justify-center gap-5 text-[0.65rem] font-semibold uppercase tracking-widest text-muted">
+        {[
+          ["about", "About"],
+          ["science", "Science"],
+          ["credits", "Credits"],
+          ["dev", "Dev"],
+        ].map(([hash, label]) => (
+          <a key={hash} href={`#${hash}`} className="transition hover:text-text">
+            {label}
+          </a>
+        ))}
+      </nav>
     </div>
   );
 }

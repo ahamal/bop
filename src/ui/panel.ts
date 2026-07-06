@@ -11,7 +11,7 @@ import type { GestureState, GestureName } from "../tracking/gestures.ts";
 
 // Shared class strings for the repeated card/grid shapes.
 const GRID = "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2";
-const CARD = "rounded-md bg-panel";
+const CARD = "rounded-xl bg-panel ring-1 ring-black/5 dark:ring-white/10";
 
 interface MeterSpec {
   key: string;

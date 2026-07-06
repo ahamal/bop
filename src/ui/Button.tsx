@@ -2,7 +2,7 @@
 // screen's Begin look), outline (bordered, transparent), quiet (borderless
 // text link).
 
-import type { ButtonHTMLAttributes } from "react";
+import type { ComponentProps } from "react";
 
 const VARIANTS = {
   // In dark mode the solid-black pill disappears into the page, so primary
@@ -21,7 +21,9 @@ const SIZES = {
   lg: "px-8 py-3 text-lg",
 } as const;
 
-type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
+// ComponentProps (not ButtonHTMLAttributes) so `ref` passes through — React 19
+// forwards it as a regular prop; imperative callers (DevScreen) rely on it.
+type Props = ComponentProps<"button"> & {
   variant?: keyof typeof VARIANTS;
   size?: keyof typeof SIZES;
 };

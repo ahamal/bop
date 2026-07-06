@@ -9,8 +9,10 @@
 // five levels are one parameter, not five entries.
 
 import type { FrameResult, TrackingSession } from "../tracking/session.ts";
-import { chompDef } from "./chomp.ts";
-import { danceDef } from "./dance.ts";
+import { chompDef } from "./chomp/chomp.ts";
+import { danceDef } from "./dance/dance.ts";
+import { droneDef } from "./drone/drone.ts";
+import { taxiDef } from "./taxi/taxi.ts";
 
 export type Level = 1 | 2 | 3 | 4 | 5;
 
@@ -42,4 +44,4 @@ export interface MicrogameDef {
 
 // The lineup — grows toward the 12 in the plan; Chomp ("Eat") is the exemplar
 // that proves the round loop end to end.
-export const MICROGAMES: readonly MicrogameDef[] = [chompDef, danceDef];
+export const MICROGAMES: readonly MicrogameDef[] = [chompDef, danceDef, taxiDef, droneDef];

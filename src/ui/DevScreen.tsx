@@ -6,7 +6,10 @@
 
 import { useEffect, useRef } from "react";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { Button } from "./Button.tsx";
+import { ThemeIconButton } from "./ThemeIconButton.tsx";
 import { TrackingSession, type FrameResult } from "../tracking/session.ts";
+import { AbstractAvatar } from "../avatar/AbstractAvatar.ts";
 import { type GestureName } from "../tracking/gestures.ts";
 import { IndicatorPanel } from "./panel.ts";
 
@@ -64,7 +67,9 @@ export function DevScreen() {
       },
       onFrame: (f) => render(f),
     });
-    session.attachAvatar(avatarCanvas);
+    // Same mesh as the play screen — mouth-open and eye-closed states come with
+    // it — plus the dev page's sunglasses.
+    session.attachAvatar(avatarCanvas, AbstractAvatar).setSunglasses(true);
 
     function render(f: FrameResult): void {
       // Match the overlay to the camera resolution once it's known (first frame).
@@ -121,7 +126,7 @@ export function DevScreen() {
     function logGesture(label: string): void {
       const chip = document.createElement("div");
       chip.className =
-        "rounded-md border border-accent bg-panel px-3 py-1.5 text-sm transition-opacity delay-[1000ms] duration-[1500ms]";
+        "rounded-full border border-accent/50 bg-panel px-3.5 py-1.5 text-sm transition-opacity delay-[1000ms] duration-[1500ms]";
       chip.textContent = label;
       gesturesEl.prepend(chip);
       while (gesturesEl.children.length > 12) gesturesEl.lastChild!.remove();
@@ -162,62 +167,64 @@ export function DevScreen() {
   }, []);
 
   return (
-    <main className="mx-auto w-full max-w-[960px] p-6">
-      <a href="#" className="mb-3 inline-flex items-center gap-1 text-sm text-accent">
-        <ArrowLeftIcon className="h-4 w-4" />
-        Game
-      </a>
-      <h1 className="mb-1 text-2xl font-semibold">bop · head tracking</h1>
-      <p className="mb-5 text-muted">
-        Look L/R · up/down · tilt L/R · tuck your chin.
-      </p>
+    <div className="min-h-screen bg-bg text-text">
+      <div className="absolute right-4 top-4">
+        <ThemeIconButton />
+      </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-md bg-black">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="absolute inset-0 h-full w-full -scale-x-100 object-cover"
-          />
-          <canvas
-            ref={overlayRef}
-            className="absolute inset-0 h-full w-full -scale-x-100"
-          />
-          <div
-            ref={statusRef}
-            className="absolute bottom-3 left-3 rounded-md bg-black/60 px-2.5 py-1 text-sm text-accent"
-          >
-            Click start to enable camera
+      <main className="mx-auto w-full max-w-[960px] px-6 py-12">
+        <a
+          href="#"
+          className="mb-8 inline-flex items-center gap-1.5 text-sm text-muted transition hover:text-text"
+        >
+          <ArrowLeftIcon className="h-4 w-4" />
+          Back
+        </a>
+        <h1 className="mb-1 text-2xl font-bold tracking-tight">Head tracking diagnostics</h1>
+        <p className="mb-6 text-muted">
+          Look L/R · up/down · tilt L/R · tuck your chin.
+        </p>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-black/5 ring-1 ring-black/10 dark:bg-white/5 dark:ring-white/10">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute inset-0 h-full w-full -scale-x-100 object-cover"
+            />
+            <canvas
+              ref={overlayRef}
+              className="absolute inset-0 h-full w-full -scale-x-100"
+            />
+            <div
+              ref={statusRef}
+              className="absolute bottom-3 left-3 rounded-md bg-black/50 px-2.5 py-1 text-sm font-medium text-white"
+            >
+              Click start to enable camera
+            </div>
+          </div>
+          <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-black/5 ring-1 ring-black/10 dark:bg-white/5 dark:ring-white/10">
+            <canvas ref={avatarRef} className="block h-full w-full" />
           </div>
         </div>
-        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-md bg-black">
-          <canvas ref={avatarRef} className="block h-full w-full" />
+
+        <div className="my-4 flex items-center gap-3">
+          <Button ref={startRef} size="md">
+            Start camera
+          </Button>
+          <Button ref={recenterRef} size="md" disabled>
+            Recenter
+          </Button>
+          <span ref={dominantRef} className="ml-auto text-sm tabular-nums text-muted" />
+          <span ref={fpsRef} className="text-sm tabular-nums text-muted" />
         </div>
-      </div>
 
-      <div className="my-4 flex items-center gap-3">
-        <button
-          ref={startRef}
-          className="rounded-md bg-accent px-5 py-2.5 font-semibold text-[#04140d] disabled:cursor-default disabled:opacity-50"
-        >
-          Start camera
-        </button>
-        <button
-          ref={recenterRef}
-          disabled
-          className="rounded-md bg-accent px-5 py-2.5 font-semibold text-[#04140d] disabled:cursor-default disabled:opacity-50"
-        >
-          Recenter
-        </button>
-        <span ref={dominantRef} className="ml-auto text-sm tabular-nums text-muted" />
-        <span ref={fpsRef} className="text-sm tabular-nums text-muted" />
-      </div>
+        <div ref={indicatorsRef} />
 
-      <div ref={indicatorsRef} />
-
-      <div ref={gesturesRef} className="mt-5 flex flex-wrap gap-2" />
-    </main>
+        <div ref={gesturesRef} className="mt-5 flex flex-wrap gap-2" />
+      </main>
+    </div>
   );
 }

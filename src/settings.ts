@@ -21,7 +21,7 @@ const DEFAULTS: Settings = {
 };
 
 // Shared with the anti-flash inline script in index.html — keep in sync.
-export const SETTINGS_STORAGE_KEY = "bop:settings";
+const SETTINGS_STORAGE_KEY = "bop:settings";
 
 // Rebuild field-by-field: drops stale keys from older stored versions and
 // falls back per-field on invalid values.

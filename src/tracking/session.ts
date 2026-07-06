@@ -160,20 +160,22 @@ export class TrackingSession {
 
   /**
    * Build the 3D avatar on the given canvas and let the session drive it.
-   * Pass an Avatar subclass constructor to swap the look (e.g. AbstractAvatar on
-   * the play screen); defaults to the readable Avatar used by the dev page.
+   * Takes the Avatar subclass supplying the look (AbstractAvatar, or a game
+   * avatar like ChompAvatar). Generic so callers get the concrete subclass
+   * back (e.g. to flip AbstractAvatar's sunglasses flag).
    */
-  attachAvatar(
+  attachAvatar<T extends Avatar>(
     canvas: HTMLCanvasElement,
-    AvatarCtor: new (canvas: HTMLCanvasElement) => Avatar = Avatar,
-  ): Avatar {
-    this.avatar = new AvatarCtor(canvas);
+    AvatarCtor: new (canvas: HTMLCanvasElement) => T,
+  ): T {
+    const avatar = new AvatarCtor(canvas);
+    this.avatar = avatar;
     // An avatar attached mid-session (the arcade swapping playfields) must
     // inherit the body neutral captured at calibration — setBody measures
     // sway/lift against it, and a fresh avatar's zero neutral would draw the
     // torso at the player's absolute camera position, off-center.
-    if (this.bodyNeutral) this.avatar.calibrateBody(this.bodyNeutral);
-    return this.avatar;
+    if (this.bodyNeutral) avatar.calibrateBody(this.bodyNeutral);
+    return avatar;
   }
 
   /** Tear down the current avatar without stopping the session — for screens

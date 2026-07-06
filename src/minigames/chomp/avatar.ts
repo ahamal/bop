@@ -10,8 +10,8 @@
 // mouth" stays a pure function of the slide position.
 
 import * as THREE from "three";
-import type { HeadPose } from "../tracking/pose.ts";
-import { AbstractAvatar } from "../avatar/AbstractAvatar.ts";
+import type { HeadPose } from "../../tracking/pose.ts";
+import { AbstractAvatar } from "../../avatar/AbstractAvatar.ts";
 
 // Scaled down and dropped low so the figure sits in the lower band of the
 // playfield with headroom for snacks to fall through.

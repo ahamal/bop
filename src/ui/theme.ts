@@ -13,7 +13,7 @@ export function resolveTheme(pref: ThemePref): "light" | "dark" {
   return pref;
 }
 
-export function applyTheme(pref: ThemePref): void {
+function applyTheme(pref: ThemePref): void {
   document.documentElement.classList.toggle("dark", resolveTheme(pref) === "dark");
 }
 

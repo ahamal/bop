@@ -13,8 +13,8 @@
 // leaning in must not move the figure out of formation.
 
 import * as THREE from "three";
-import type { HeadPose } from "../tracking/pose.ts";
-import { AbstractAvatar } from "../avatar/AbstractAvatar.ts";
+import type { HeadPose } from "../../tracking/pose.ts";
+import { AbstractAvatar } from "../../avatar/AbstractAvatar.ts";
 
 // Scaled down and dropped low: front row of the formation, with headroom
 // above for the backup dancers' row and the token lane.

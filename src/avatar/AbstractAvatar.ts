@@ -1,8 +1,8 @@
 // A tracking-driven avatar with an ABSTRACT look — the same faceted geometry as
 // the home-screen HeroAvatar (shared via abstractParts), but here wired to the
 // live head pose. It reuses all of Avatar's pose-driving machinery (smoothing,
-// setPose/setBody/setZoom, render loop) and only swaps the geometry. Used on the
-// play screen; the dev page keeps the readable Avatar for diagnostics.
+// setPose/setBody/setZoom, render loop) and only swaps the geometry. Used on
+// the play screen, and on the dev page with the sunglasses flag on.
 //
 // Expression: the head is featureless (nose only) until the player does
 // something notable — the mouth appears as it opens, and a closed eye shows as
@@ -17,6 +17,7 @@ import {
   buildAbstractHead,
   buildAbstractTorso,
   buildEyeDashes,
+  buildSunglasses,
 } from "./abstractParts.ts";
 
 // Show a feature once its smoothed signal clears this (hysteresis comes free
@@ -30,6 +31,7 @@ export class AbstractAvatar extends Avatar {
   private declare mouth: THREE.Mesh;
   private declare eyeDashL: THREE.Mesh; // screen-left = person's left eye
   private declare eyeDashR: THREE.Mesh;
+  private declare shades: THREE.Group;
 
   // Aim lower than the dev avatar so the figure sits higher in frame and more
   // of the torso is visible.
@@ -64,7 +66,18 @@ export class AbstractAvatar extends Avatar {
     this.eyeDashL = dashes.left;
     this.eyeDashR = dashes.right;
 
+    // Sunglasses, hidden until the flag flips (the dev page's look).
+    this.shades = buildSunglasses();
+    this.shades.visible = false;
+    head.add(this.shades);
+
     this.headPivot.add(head);
+  }
+
+  /** Toggle the sunglasses. The lenses sit in front of the eye dashes, so
+   * blink dashes simply hide behind them while this is on. */
+  setSunglasses(on: boolean): void {
+    this.shades.visible = on;
   }
 
   protected applyFace(f: FaceExpression): void {

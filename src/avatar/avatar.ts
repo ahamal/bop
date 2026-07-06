@@ -1,7 +1,11 @@
-// A simple 3D head-and-shoulders that mirrors the tracked pose. The head
-// (face-driven) and the torso (pose-driven) are fully independent — there's no
-// neck connecting them. At center they line up normally; after that they move
-// on their own and visibly detach.
+// The pose-driving avatar base: a 3D head-and-shoulders rig that mirrors the
+// tracked pose. The head (face-driven) and the torso (pose-driven) are fully
+// independent — there's no neck connecting them. At center they line up
+// normally; after that they move on their own and visibly detach.
+//
+// Abstract: subclasses supply the geometry (buildBody/buildHead — see
+// AbstractAvatar, the app's look); all the smoothing/celebration/render
+// machinery lives here.
 
 import * as THREE from "three";
 import type { HeadPose } from "../tracking/pose.ts";
@@ -10,10 +14,6 @@ import type { FaceExpression } from "../tracking/face.ts";
 import { MIRROR_SIGN } from "../tracking/mirror.ts";
 
 const DEG2RAD = Math.PI / 180;
-
-const SKIN = 0xe0b89c;
-const HAIR = 0x4a4f5e;
-const SHIRT = 0x50dca0;
 
 // The torso group pivots at the shoulder line, so tilt rotates the torso about
 // itself rather than swinging from the head. Sits just below the head's resting
@@ -44,7 +44,7 @@ const CELEBRATE_HOPS_PER_S = 2.5;
 const CELEBRATE_HOP_Y = 0.3;
 const CELEBRATE_ROCK_RAD = 0.09;
 
-export class Avatar {
+export abstract class Avatar {
   private renderer: THREE.WebGLRenderer;
   // Protected so game subclasses can add scene content (e.g. Chomp's falling
   // snacks) that isn't part of the figure itself.
@@ -62,6 +62,13 @@ export class Avatar {
   // whole figure hops/rocks — a wrapper the per-frame pose writes never touch
   // (the same parent-group trick the game avatars use).
   protected figureGroup = new THREE.Group();
+  // Per-avatar handedness on the mirrored channels (yaw/roll/cx, torso
+  // tilt/sway), multiplied with the app-wide MIRROR_SIGN. Front-facing
+  // avatars keep 1. An avatar staged back-to-camera (rotated π about y, e.g.
+  // the Traffic runner) sets -1: the flip negates how those local channels
+  // appear on screen, and from behind the person's true handedness IS the
+  // screen handedness, so one negation restores "lean left = screen left".
+  protected viewSign: 1 | -1 = 1;
   // Resting reading captured at calibration, so neutral = centered/straight.
   private bodyNeutral = { tilt: 0, sway: 0, centerY: 0, width: 0 };
   private canvas: HTMLCanvasElement;
@@ -140,90 +147,28 @@ export class Avatar {
   }
 
   /** Position/aim the camera. Overridable so a subclass can reframe (e.g. show
-   * more torso) without touching the dev avatar. */
+   * more torso). */
   protected frameCamera(): void {
     this.camera.position.set(0, 0.4, 7);
     this.camera.lookAt(0, 0.2, 0);
   }
 
-  protected buildBody(): void {
-    const shirt = new THREE.MeshStandardMaterial({ color: SHIRT, roughness: 0.7 });
+  /** Add the torso meshes to torsoGroup (positioned by the render loop at the
+   * shoulder pivot) — called once from the base constructor. */
+  protected abstract buildBody(): void;
 
-    // Pivot the torso at the shoulder line; meshes are positioned relative to it
-    // so tilt rotates the torso about itself.
-    this.torsoGroup.position.y = SHOULDER_PIVOT_Y;
-
-    // Shoulders: a wide horizontal capsule, centered on the pivot.
-    const shoulders = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.55, 1.9, 8, 16),
-      shirt,
-    );
-    shoulders.rotation.z = Math.PI / 2;
-    this.torsoGroup.add(shoulders);
-
-    // Chest fill below the shoulders.
-    const chest = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.9, 1.1, 1.1, 24),
-      shirt,
-    );
-    chest.position.y = -0.45;
-    this.torsoGroup.add(chest);
-
-    // Head pivot sits just above the shoulders at rest; it's independent.
-    this.headPivot.position.set(0, -0.85, 0);
-  }
-
-  protected buildHead(): void {
-    const skin = new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.85 });
-    const hair = new THREE.MeshStandardMaterial({ color: HAIR, roughness: 0.9 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x1b1f27 });
-
-    // Head sits above the pivot.
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.9, 32, 32), skin);
-    head.scale.set(0.92, 1.08, 0.95);
-    head.position.y = 0.95;
-    this.headPivot.add(head);
-
-    // Hair: a cap over the top/back only, stopping above the forehead.
-    const hairMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(0.93, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.38),
-      hair,
-    );
-    hairMesh.scale.set(0.98, 1.1, 1.04);
-    hairMesh.position.y = 1.0;
-    hairMesh.position.z = -0.12;
-    this.headPivot.add(hairMesh);
-
-    // Nose — points +Z so head orientation is obvious.
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.4, 16), skin);
-    nose.rotation.x = Math.PI / 2;
-    nose.position.set(0, 0.9, 0.92);
-    this.headPivot.add(nose);
-
-    // Eyes.
-    for (const dx of [-0.32, 0.32]) {
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 16), dark);
-      eye.position.set(dx, 1.05, 0.78);
-      this.headPivot.add(eye);
-    }
-
-    // Ears.
-    for (const dx of [-0.88, 0.88]) {
-      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 16), skin);
-      ear.scale.set(0.6, 1, 0.7);
-      ear.position.set(dx, 0.9, 0);
-      this.headPivot.add(ear);
-    }
-  }
+  /** Add the head meshes to headPivot — called once from the base constructor. */
+  protected abstract buildHead(): void;
 
   /** Drive the head from a tracked pose. Pose is relative to neutral. */
   setPose(pose: HeadPose): void {
+    const sign = this.viewSign * MIRROR_SIGN;
     this.target.x = -pose.pitch * DEG2RAD; // pitch: vertical, not mirrored
-    this.target.y = MIRROR_SIGN * pose.yaw * DEG2RAD; // yaw: handedness
-    this.target.z = MIRROR_SIGN * pose.roll * DEG2RAD; // roll: handedness
+    this.target.y = sign * pose.yaw * DEG2RAD; // yaw: handedness
+    this.target.z = sign * pose.roll * DEG2RAD; // roll: handedness
     // Translate the head by its camera-frame offset from neutral. x is
     // handedness (mirror); image y is top-down so negate for up.
-    this.targetHead.x = clampOffset(MIRROR_SIGN * pose.cx * TRANSLATE_GAIN);
+    this.targetHead.x = clampOffset(sign * pose.cx * TRANSLATE_GAIN);
     this.targetHead.y = clampOffset(-pose.cy * TRANSLATE_GAIN);
   }
 
@@ -260,12 +205,13 @@ export class Avatar {
   /** Drive the upper body from tracked shoulders, relative to neutral. */
   setBody(body: BodyPose): void {
     // Tilt: handedness, mirrored to agree with the head's roll.
+    const sign = this.viewSign * MIRROR_SIGN;
     this.targetBody.tilt =
-      MIRROR_SIGN * (body.shoulderTilt - this.bodyNeutral.tilt) * DEG2RAD;
+      sign * (body.shoulderTilt - this.bodyNeutral.tilt) * DEG2RAD;
     // Sway: horizontal shoulder-center offset, mirrored like the head's x so a
     // whole-body move shifts both the same direction.
     const sway = body.sway - this.bodyNeutral.sway;
-    this.targetBody.sway = clampOffset(MIRROR_SIGN * sway * TRANSLATE_GAIN);
+    this.targetBody.sway = clampOffset(sign * sway * TRANSLATE_GAIN);
     // Lift: vertical shoulder-center offset (image y is top-down, so negate for
     // up). Raising the shoulders moves the torso up; a whole-body move tracks
     // the head because both use the same signal type and gain.
