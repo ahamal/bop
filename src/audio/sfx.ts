@@ -1,4 +1,5 @@
-// Tiny synthesized UI sounds — plain Web Audio, no files. The context is
+// Tiny synthesized UI sounds — plain Web Audio, no files (with one exception:
+// the recorded success flourish layered into playCelebrate). The context is
 // created lazily on first use (by then the user has long since interacted, so
 // autoplay policy is satisfied) and shared across all effects.
 //
@@ -147,6 +148,12 @@ function foomp(): void {
   src.stop(t + 0.12);
 }
 
+// The one recorded sound in the palette: a short (~2s) success flourish
+// (freesound.org community "complete sound" #98972), layered over the
+// synthesized celebration below. Lazily created; replayed from the top if a
+// celebration retriggers.
+let successAudio: HTMLAudioElement | null = null;
+
 /** Routine complete (the confetti burst), in three acts:
  *    launch  — the low foomp of the popper firing;
  *    burst   — two upward swishes + ~14 stereo-scattered pops rising in
@@ -155,6 +162,12 @@ function foomp(): void {
  *              ~2.5s while the paper flutters down.
  *  Still melody-free end to end. */
 export function playCelebrate(): void {
+  if (!successAudio) {
+    successAudio = new Audio("sfx/success.mp3");
+    successAudio.volume = 0.6;
+  }
+  successAudio.currentTime = 0;
+  void successAudio.play().catch(() => {});
   foomp();
   swish(0, 0.35);
   swish(0.12, 0.2);

@@ -1,13 +1,8 @@
 // The app's shared pill button. Variants: primary (solid black — the home
 // screen's Begin look), outline (bordered, transparent), quiet (borderless
-// text link). WHITE_SURFACE is exported for composites that sit on a white
-// pill instead (the reminder split button).
+// text link).
 
 import type { ButtonHTMLAttributes } from "react";
-
-// White in both modes; the ring keeps it visible on the light background.
-export const WHITE_SURFACE =
-  "bg-white text-[#0d1117] shadow-lg shadow-black/10 ring-1 ring-black/10";
 
 const VARIANTS = {
   // In dark mode the solid-black pill disappears into the page, so primary

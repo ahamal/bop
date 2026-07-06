@@ -37,12 +37,15 @@ const RECENTER_MS = 700; // shorter window when Recentering
 // the initial neutral (the "starts out of whack" recentering). Recenter skips
 // this — the stream is warm and the user is already settled.
 const CALIB_SETTLE_MS = 800;
-// Per-frame angle delta (|Δyaw|+|Δpitch|+|Δroll|, deg) above which the head
-// counts as moving during calibration. Movement restarts the window: neutral
-// must come from a genuinely still pose, not the average of settling in —
-// that averaged-motion neutral was why tracking started skewed until a manual
-// recenter (done while actually still) fixed it.
-const CALIB_STILL_DEG = 2.5;
+// Angular rate (|Δyaw|+|Δpitch|+|Δroll| per second, deg/s) above which the
+// head counts as moving during calibration. Movement restarts the window:
+// neutral must come from a genuinely still pose, not the average of settling
+// in — that averaged-motion neutral was why tracking started skewed until a
+// manual recenter (done while actually still) fixed it. A rate rather than a
+// per-frame delta so the gate reads the same at any camera fps; 30°/s sits
+// above landmark jitter but rejects the slow tail of a settling move (the old
+// 2.5°/frame ≈ 75°/s at 30fps let those through, skewing relax recenters).
+const CALIB_STILL_DPS = 30;
 const CALIB_MIN_SAMPLES = 10; // don't finalize until this many head reads land
 const BODY_MIN_CONFIDENCE = 0.5; // shoulders below this don't back a depth read
 
@@ -131,6 +134,7 @@ export class TrackingSession {
   private calibEndTime = 0;
   private calibIsRecenter = false;
   private calibPrevPose: HeadPose | null = null; // last pose, for the stillness check
+  private calibPrevTime = 0; // when it was read (the rate's denominator)
   // False until the FIRST calibration lands. Until then the avatar is held in
   // its rest posture — there's no trustworthy neutral to be relative to, so
   // driving it would just replay the settling-in wobble. Recenters (neutral
@@ -241,6 +245,7 @@ export class TrackingSession {
     this.calibrating = true;
     this.calibIsRecenter = isRecenter;
     this.calibPrevPose = null;
+    this.calibPrevTime = 0;
     this.calibSampleStart =
       performance.now() + (isRecenter ? 0 : CALIB_SETTLE_MS);
     this.calibEndTime =
@@ -285,17 +290,20 @@ export class TrackingSession {
     if (frame) {
       if (this.calibrating) {
         const prev = this.calibPrevPose;
+        const prevT = this.calibPrevTime;
         this.calibPrevPose = frame.pose;
+        this.calibPrevTime = now;
         const moved = prev
           ? Math.abs(frame.pose.yaw - prev.yaw) +
             Math.abs(frame.pose.pitch - prev.pitch) +
             Math.abs(frame.pose.roll - prev.roll)
           : 0;
+        const rate = prev && now > prevT ? (moved / (now - prevT)) * 1000 : 0;
         if (now < this.calibSampleStart) {
           // Warm-up: don't sample, but pin neutral to the live pose so a
           // visible avatar rests centered instead of swinging on a stale zero.
           this.neutral = frame.pose;
-        } else if (moved > CALIB_STILL_DEG) {
+        } else if (rate > CALIB_STILL_DPS) {
           // Still moving — throw the window away and wait for a still head.
           this.calib.reset();
           this.calibEndTime =

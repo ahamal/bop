@@ -4,7 +4,12 @@
 //   still → wait for the head to hold still, then ask the host to RECENTER
 //           (re-zero neutral). The host calls recentered() when it lands, which
 //           advances to the next step. This is the ONLY step that centers.
-//   relax → wait for the head to return near neutral for a beat (separates reps).
+//   relax → wait for the head to return inside generous near-rest angle bands
+//           (raw axes, no gesture hysteresis) AND hold measurably still for a
+//           beat (separates reps); most relax steps then recenter, absorbing
+//           whatever the move shifted. Long stillness that never reaches the
+//           bands = the baseline itself is off → recenter anyway (self-repair)
+//           instead of deadlocking.
 //   hold  → the timer decreases only while the target gesture is held.
 //   roll  → one directed half-circle pass. Head roll/pitch map to a single angle
 //           along a semicircle (180° = left ear down, 90° = chin to chest, 0° =
@@ -33,8 +38,34 @@ export interface StackSnapshot {
 // "Hold still" gate.
 const READY_STILL_MS = 1800;
 const STILL_THRESH_DPS = 60; // deg/sec (yaw+pitch+roll) below this counts as still
-// "Relax" gate: how long to stay near neutral before we recenter and move on.
-const RELAX_MS = 1200;
+// "Relax" gate: how much near-rest time to bank before we recenter and move
+// on. Banked, not continuous: time in the bands accumulates, time outside
+// drains in real time (1×) — a blip costs what it lasts, no 2× punishment,
+// while sustained movement still empties the bank.
+const RELAX_MS = 2000;
+const RELAX_DRAIN = 1; // bank drain rate while outside the bands (× dt)
+// ...and measurably STILL while doing it, so the recenter can't capture a
+// still-settling pose as the new baseline. The rate sits above landmark
+// jitter, below a settling move's tail.
+const RELAX_STILL_DPS = 25;
+// "Near rest" bands (deg from the current baseline), judged on the RAW axes —
+// NOT via dominant === "neutral". Dominant carries every gesture's exit
+// hysteresis, so when a move also shifts the body, the new resting pose can
+// hover at an exit threshold (6° roll / ~1% depth) and flicker in and out of
+// "neutral" forever. Raw bands have no hysteresis to flicker, and they're
+// generous on purpose: a moderately deviated baseline is exactly what the
+// recenter that follows is here to absorb (same trick as the dance game's
+// center judging). Depth is deliberately NOT checked — it can't be told apart
+// from rest without the baseline that's in question; recentering repairs it.
+const RELAX_YAW_DEG = 13;
+const RELAX_PITCH_DEG = 10;
+const RELAX_ROLL_DEG = 9;
+// Deadlock breaker: this much accumulated stillness without ever reaching the
+// near-rest bands means the baseline itself has deviated past them (a person
+// told to relax doesn't hold a stretch this steadily for this long). Recenter
+// anyway: the fresh capture of the current (still) pose repairs the baseline,
+// and the step advances when it lands.
+const STUCK_STILL_MS = 7000;
 // If a requested recenter never lands (host's onCalibrated doesn't fire — e.g.
 // the face was lost mid-recenter), re-request after this long so the step can't
 // stall forever.
@@ -64,6 +95,8 @@ export class StackPlayer {
   // still accumulators
   private stillMs = 0;
   private prevAngles: { yaw: number; pitch: number; roll: number } | null = null;
+  // Relax release latch: true once the previous hold's gesture has let go.
+  private prevReleased = false;
   private recenterRequested = false;
   private recenterWaitMs = 0;
 
@@ -80,6 +113,11 @@ export class StackPlayer {
     if (k === "still" || k === "relax") this.advance();
   }
 
+  /** Dev/testing helper: complete the current step unconditionally. */
+  skip(): void {
+    if (!this.done) this.advance();
+  }
+
   /** Host recentered manually mid-step (new neutral baseline) → the progress
    * earned against the old baseline no longer means anything; start the current
    * step over without advancing. */
@@ -91,6 +129,7 @@ export class StackPlayer {
     this.arcFurthest = NaN;
     this.stillMs = 0;
     this.prevAngles = null;
+    this.prevReleased = false;
   }
 
   update(f: FrameResult, dt: number): StackSnapshot {
@@ -101,23 +140,48 @@ export class StackPlayer {
     return this.updateMove(f, dt);
   }
 
-  // Wait until the head returns near neutral for a beat, then recenter (re-zero)
-  // before the next movement. Advances when the host confirms via recentered().
+  // Wait until the head is inside the near-rest bands AND measurably still for
+  // a beat, then recenter (re-zero) before the next movement. Advances when the
+  // host confirms via recentered(). If the head stays still for a long time but
+  // never inside the bands (the baseline itself deviated more than the bands —
+  // see STUCK_STILL_MS), recenter anyway: the capture repairs the baseline.
   private updateRelax(f: FrameResult, dt: number): StackSnapshot {
     const step = this.routine[this.index];
-    const neutral = f.dominant === "neutral";
-    this.held = neutral ? this.held + dt : 0; // must be continuously neutral
-    if (this.held >= RELAX_MS) {
+    this.trackStillness(f, dt, RELAX_STILL_DPS, RELAX_DRAIN);
+    const m = f.metrics;
+    const nearRest =
+      Math.abs(m.headYaw) <= RELAX_YAW_DEG &&
+      Math.abs(m.headPitch) <= RELAX_PITCH_DEG &&
+      Math.abs(m.headRoll) <= RELAX_ROLL_DEG;
+    // Release latch: the bank opens only once the previous hold's gesture has
+    // let go. The angle bands can't see a held TUCK (depth is deliberately
+    // unchecked), so without this the bank — and the recenter — could run
+    // while the player is still tucked and reading the card, baking a tucked
+    // pose into the baseline. One-way: a later flicker can't close it again.
+    // (A phantom "still held" gesture from a skewed baseline parks the bank at
+    // zero, but the stuck-breaker below stays live and repairs that path.)
+    if (!this.prevReleased) {
+      const prev = this.index > 0 ? this.routine[this.index - 1] : null;
+      this.prevReleased = !(prev?.kind === "hold" && isActive(f.states, prev.state));
+    }
+    this.held =
+      this.prevReleased && nearRest
+        ? this.held + dt
+        : Math.max(0, this.held - dt * RELAX_DRAIN);
+    const settled = this.held >= RELAX_MS && this.stillMs >= RELAX_MS;
+    const stuck = this.stillMs >= STUCK_STILL_MS;
+    if (settled || stuck) {
       // Only re-zero when the step asks for it (before a ROM hold); between
-      // identical reps the baseline hasn't drifted, so just move on.
-      if (step.kind === "relax" && !step.recenter) {
+      // identical reps the baseline hasn't drifted, so just move on — unless
+      // we got here stuck, where the recenter IS the repair.
+      if (step.kind === "relax" && !step.recenter && !stuck) {
         this.advance();
         return this.snapshot(true, false);
       }
-      return this.snapshot(neutral, this.requestRecenterOnce(dt));
+      return this.snapshot(nearRest, this.requestRecenterOnce(dt));
     }
     this.recenterWaitMs = 0;
-    return this.snapshot(neutral, false);
+    return this.snapshot(nearRest, false);
   }
 
   /** One-shot recenter request, re-armed if the host never confirms in time. */
@@ -136,22 +200,31 @@ export class StackPlayer {
   }
 
   private updateStill(f: FrameResult, dt: number): StackSnapshot {
-    const a = { yaw: f.metrics.headYaw, pitch: f.metrics.headPitch, roll: f.metrics.headRoll };
+    this.trackStillness(f, dt, STILL_THRESH_DPS);
     let requestRecenter = false;
+    if (this.stillMs >= READY_STILL_MS) {
+      requestRecenter = this.requestRecenterOnce(dt); // host recenters, then calls recentered()
+    }
+    return this.snapshot(false, requestRecenter);
+  }
+
+  // Accumulate/decay stillMs from the frame-to-frame angular rate (deg/sec, so
+  // the gate reads the same at any camera fps). Measured against the previous
+  // FRAME, not the baseline — which is what lets it stay trustworthy even when
+  // the baseline itself is skewed. `drain` scales how fast moving frames eat
+  // the bank (the still card punishes movement; relax forgives wobbles).
+  private trackStillness(f: FrameResult, dt: number, thresholdDps: number, drain = 2): void {
+    const a = { yaw: f.metrics.headYaw, pitch: f.metrics.headPitch, roll: f.metrics.headRoll };
     if (this.prevAngles && dt > 0) {
       const move =
         Math.abs(a.yaw - this.prevAngles.yaw) +
         Math.abs(a.pitch - this.prevAngles.pitch) +
         Math.abs(a.roll - this.prevAngles.roll);
-      // Normalize to deg/sec so the gate reads the same at any camera fps.
       const rate = (move / dt) * 1000;
-      this.stillMs = rate < STILL_THRESH_DPS ? this.stillMs + dt : Math.max(0, this.stillMs - dt * 2);
-      if (this.stillMs >= READY_STILL_MS) {
-        requestRecenter = this.requestRecenterOnce(dt); // host recenters, then calls recentered()
-      }
+      this.stillMs =
+        rate < thresholdDps ? this.stillMs + dt : Math.max(0, this.stillMs - dt * drain);
     }
     this.prevAngles = a;
-    return this.snapshot(false, requestRecenter);
   }
 
   private updateMove(f: FrameResult, dt: number): StackSnapshot {
@@ -202,6 +275,7 @@ export class StackPlayer {
     this.arcFurthest = NaN;
     this.stillMs = 0;
     this.prevAngles = null;
+    this.prevReleased = false;
     this.recenterRequested = false;
     this.recenterWaitMs = 0;
     if (this.index >= this.routine.length) this.done = true;
@@ -221,7 +295,8 @@ export class StackPlayer {
         break;
       }
       case "relax": {
-        progress = Math.min(1, this.held / RELAX_MS);
+        // Both gates must fill: continuous neutral AND accumulated stillness.
+        progress = Math.min(1, Math.min(this.held, this.stillMs) / RELAX_MS);
         break;
       }
       case "hold": {

@@ -23,7 +23,7 @@ export type Step =
 // threshold is a ~2% depth change against the calibrated neutral, so baseline
 // drift between reps would swallow it — the recenter is what keeps rep 2+
 // detectable.
-const tuck = (): Step => ({ kind: "hold", label: "Tuck your chin in", state: "tuck", holdMs: 6000 });
+const tuck = (): Step => ({ kind: "hold", label: "Tuck your chin in", state: "tuck", holdMs: 8000 });
 const relax = (): Step => ({ kind: "relax", label: "Relax, back to neutral", recenter: true });
 
 // Ordered easy → harder: gentle ROM holds warm the neck up, the chin tucks
@@ -41,9 +41,12 @@ export const NECK_ROUTINE: Step[] = [
   relax(),
   { kind: "hold", label: "Look over your right shoulder", state: "lookRight", holdMs: 15000 },
   relax(),
-  { kind: "hold", label: "Tilt left, left hand on head, right arm hanging", state: "tiltLeft", holdMs: 20000 },
+  // The look-up detail works because gesture guards are entry-only: engage the
+  // tilt first, and the coupled yaw the upward gaze bleeds in can't stop the
+  // timer (gestures.ts).
+  { kind: "hold", label: "Tilt left, left hand on head, right arm hanging, look slightly up", state: "tiltLeft", holdMs: 20000 },
   relax(),
-  { kind: "hold", label: "Tilt right, right hand on head, left arm hanging", state: "tiltRight", holdMs: 20000 },
+  { kind: "hold", label: "Tilt right, right hand on head, left arm hanging, look slightly up", state: "tiltRight", holdMs: 20000 },
   relax(),
   { kind: "hold", label: "Lower your chin to your chest", state: "lookDown", holdMs: 20000 },
   relax(),
@@ -55,7 +58,9 @@ export const NECK_ROUTINE: Step[] = [
   tuck(), relax(),
   tuck(), relax(),
   tuck(), relax(),
-  // Flowing cooldown: one card per half-circle pass.
+  // Flowing cooldown: one card per half-circle pass, over and back, twice.
   { kind: "roll", label: "Slow half circle, left ear to chest to right", dir: 1 },
   { kind: "roll", label: "And back, right ear to chest to left", dir: -1 },
+  { kind: "roll", label: "Once more, left ear to chest to right", dir: 1 },
+  { kind: "roll", label: "And back again, right ear to chest to left", dir: -1 },
 ];

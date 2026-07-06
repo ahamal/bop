@@ -33,7 +33,15 @@ export function buildAbstractHead(): THREE.Group {
   // nostrils, tilted so the tip juts out more than the bridge. Sized to the
   // middle third of the face (bridge ~ eye line, nostrils well clear of the
   // mouth) rather than running forehead-to-chin. Makes the facing obvious.
-  const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.17, 0.5, 3), mat);
+  // Its own, glossier material: the nose is the face's main orientation cue,
+  // and a shinier surface catches the key/rim lights as the head turns.
+  const noseMat = new THREE.MeshStandardMaterial({
+    color: ACCENT,
+    roughness: 0.32,
+    metalness: 0.4,
+    flatShading: true,
+  });
+  const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.17, 0.5, 3), noseMat);
   nose.scale.set(0.8, 1, 0.6);
   nose.position.set(0, 0.8, 0.84);
   nose.rotation.x = -0.22;

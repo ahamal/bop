@@ -79,10 +79,14 @@ interface GestureConfig {
   // so shoulder-width scale error can't shift the signal being thresholded.
   torsoBand?: number;
   // Cross-axis guards: each named axis's magnitude (deg from neutral) must stay
-  // at/below its limit for this gesture to engage, and engagement drops if it's
-  // exceeded. This is what keeps a turn from bleeding into a tilt, or a turn/nod
-  // from bleeding into a tuck — the angle estimates couple, so a "centered"
-  // requirement is how a state stays its own movement.
+  // at/below its limit for this gesture to ENGAGE. This is what keeps a turn
+  // from bleeding into a tilt, or a turn/nod from bleeding into a tuck — the
+  // angle estimates couple, so a "centered" requirement is how a state stays
+  // its own movement. Entry-only, deliberately: once a gesture is genuinely
+  // engaged, adding a secondary movement on top (the assisted tilt's "look
+  // slightly up" bleeds coupled yaw) must not drop it — disengaging is owned
+  // by the signal's own exit hysteresis (plus validity/torso, which really do
+  // invalidate a hold).
   guards?: Partial<Record<"yaw" | "pitch" | "roll", number>>;
 }
 
@@ -118,15 +122,23 @@ const CONFIGS: Record<GestureName, GestureConfig> = {
     // pulls back, so 1 − closeness is positive = tucked. The torso is a
     // stillness veto (torsoBand), not part of the signal — its scale error and
     // noise stay out of this tiny threshold. Fractions of neutral closeness.
+    // Tuned permissive (1.4% after filtering): a false negative on an honest
+    // tuck is far more frustrating than a false positive — the tuck card is
+    // explicit about what's being asked, so lean toward trusting the player.
     signal: (m) => 1 - m.headCloseness,
-    enter: 0.018,
-    exit: 0.009,
+    enter: 0.014,
+    exit: 0.007,
     requiresBody: true,
-    torsoBand: 0.04,
+    // Generous: shoulder width is the noisiest signal in the stack, and people
+    // naturally brace their shoulders while tucking.
+    torsoBand: 0.06,
     dwellMs: 150,
     filtered: true,
     // A deliberate tuck is done facing forward; keep it from counting mid-turn.
-    guards: { yaw: 12, pitch: 12, roll: 10 },
+    // Pitch is the loose one: a natural tuck INCLUDES some chin-down, so real
+    // tucks ride 12–18° of pitch — the guard only needs to reject a full
+    // chin-to-chest nod (lookDown enters at 15° and keeps going).
+    guards: { yaw: 12, pitch: 20, roll: 10 },
   },
 };
 
@@ -151,11 +163,18 @@ function torsoStill(cfg: GestureConfig, m: Metrics): boolean {
   return cfg.torsoBand === undefined || Math.abs(m.torsoCloseness - 1) <= cfg.torsoBand;
 }
 
+// How long a body-requiring gesture keeps working after the last trustworthy
+// shoulder frame. Body tracking flickers (a raised arm, lighting); one dropped
+// frame must not kill an engaged tuck or reset its dwell — only a sustained
+// loss should veto.
+const BODY_GRACE_MS = 400;
+
 export class GestureDetector {
   private states: Record<GestureName, GestureState>;
   private pendingSince: Record<GestureName, number | null>;
   private activatedAt: Record<GestureName, number>;
   private filters: Partial<Record<GestureName, OneEuroFilter>> = {};
+  private lastBodyMs = -Infinity; // when the body was last trustworthy
 
   constructor() {
     this.states = {} as Record<GestureName, GestureState>;
@@ -190,6 +209,7 @@ export class GestureDetector {
       this.activatedAt[name] = 0;
       this.filters[name]?.reset();
     }
+    this.lastBodyMs = -Infinity;
   }
 
   /** Live state of every gesture, in GESTURE_NAMES order. */
@@ -205,6 +225,7 @@ export class GestureDetector {
 
   /** Feed a frame of metrics; returns any states that engaged this frame. */
   update(m: Metrics, now: number): GestureEvent[] {
+    if (m.bodyTracked) this.lastBodyMs = now;
     const events: GestureEvent[] = [];
     for (const name of GESTURE_NAMES) this.step(name, m, now, events);
     return events;
@@ -223,9 +244,13 @@ export class GestureDetector {
     if (cfg.filtered) sig = this.filters[name]!.filter(sig, now);
     st.value = sig;
 
-    const valid = !cfg.requiresBody || m.bodyTracked;
-    const guardsOk = guardsSatisfied(cfg, m) && torsoStill(cfg, m);
-    const engaged = valid && guardsOk && sig >= cfg.enter;
+    // requiresBody with grace: a fresh trustworthy shoulder frame isn't needed
+    // every frame, just recently — dropouts bridge instead of vetoing. (The
+    // torso-stillness check self-neutralizes on dropout frames: torsoCloseness
+    // reads exactly 1 when no body backed the frame.)
+    const valid = !cfg.requiresBody || now - this.lastBodyMs <= BODY_GRACE_MS;
+    const torsoOk = torsoStill(cfg, m);
+    const engaged = valid && guardsSatisfied(cfg, m) && torsoOk && sig >= cfg.enter;
 
     if (!st.active) {
       if (engaged) {
@@ -243,8 +268,10 @@ export class GestureDetector {
       } else {
         this.pendingSince[name] = null;
       }
-    } else if (!valid || !guardsOk || sig <= cfg.exit) {
-      // Re-arm on the way back out, if a guard tripped, or if we lost the torso.
+    } else if (!valid || !torsoOk || sig <= cfg.exit) {
+      // Re-arm on the way back out, or if the torso moved / body was lost.
+      // Cross-axis guards deliberately do NOT drop an engaged gesture (see
+      // GestureConfig.guards) — only entry checks them.
       st.active = false;
       st.heldMs = 0;
     } else {

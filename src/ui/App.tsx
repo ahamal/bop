@@ -1,9 +1,10 @@
-// The app shell. Two screens for now — the game (default) and the dev
-// diagnostics page (#dev) — switched by the URL hash so each is reloadable and
-// linkable. Routing is the only thing React owns at the top level; everything
-// per-frame lives below in the engine.
+// The app shell. Every screen is a hash route — home (default), the routine
+// (#play), the arcade (#arcade), and the dev diagnostics page (#dev) — so each
+// is bookmarkable, reloadable, and browser-back works (hash changes push
+// history entries). Routing is the only thing React owns at the top level;
+// everything per-frame lives below in the engine.
 
-import { useState, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { ArcadeScreen } from "./ArcadeScreen.tsx";
 import { DevScreen } from "./DevScreen.tsx";
 import { GameScreen } from "./GameScreen.tsx";
@@ -20,20 +21,17 @@ function route(): string {
   return window.location.hash.replace(/^#\/?/, "");
 }
 
+const go = (hash: string): void => {
+  window.location.hash = hash;
+};
+const goHome = (): void => go("");
+
 export function App() {
   const current = useSyncExternalStore(subscribe, route);
   useApplyTheme(useSettings().theme);
-  // Play and the arcade are app state (not bookmarkable routes); only #dev
-  // routes. The arcade owns picker ↔ game internally so its camera session
-  // survives game switches.
-  const [screen, setScreen] = useState<"home" | "play" | "minigames">("home");
   if (current === "dev") return <DevScreen />;
-  if (screen === "play") return <PlayScreen onExit={() => setScreen("home")} />;
-  if (screen === "minigames") return <ArcadeScreen onExit={() => setScreen("home")} />;
-  return (
-    <GameScreen
-      onBegin={() => setScreen("play")}
-      onMinigames={() => setScreen("minigames")}
-    />
-  );
+  if (current === "play") return <PlayScreen onExit={goHome} />;
+  if (current === "arcade") return <ArcadeScreen onExit={goHome} />;
+  // Anything unrecognized falls through to home.
+  return <GameScreen onBegin={() => go("play")} onMinigames={() => go("arcade")} />;
 }

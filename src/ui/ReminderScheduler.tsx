@@ -1,14 +1,14 @@
-// Reminder scheduling for the completion screen, as a single split button:
-// tapping the main segment ("Remind me in 2 hours") schedules the push via
-// scheduleReminder(); the chevron segment changes the delay — other hour
-// counts, tomorrow, or a weekday up to 3 days out (day choices reveal a time
-// field below). The select is a transparent native element over the chevron,
-// so the picker UX stays native. Renders nothing where push isn't supported.
-// Dev builds get an extra "in 2 minutes" choice for the local end-to-end test.
+// Reminder scheduling for the completion screen: a delay dropdown reading as
+// the full sentence ("Notify me again in 2 hours"; day choices reveal a time
+// field below), with a "Remind me" button under it that schedules the push via
+// scheduleReminder(). The dropdown is a transparent native select over an
+// outline pill, so it looks like the app's buttons but the picker UX stays
+// native. Renders nothing where push isn't supported. Dev builds get an extra
+// "in 2 minutes" choice for the local end-to-end test.
 
 import { useState } from "react";
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
-import { WHITE_SURFACE } from "./Button.tsx";
+import { Button } from "./Button.tsx";
 import { remindersSupported, scheduleReminder } from "../notify/reminders.ts";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -82,35 +82,29 @@ export function ReminderScheduler() {
   }
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      {/* Split button on a white pill: main segment schedules, chevron segment
-          picks the delay. */}
-      <div className={`flex items-stretch overflow-hidden rounded-full ${WHITE_SURFACE}`}>
-        <button
-          onClick={schedule}
-          disabled={status === "busy"}
-          className="px-5 py-2.5 text-xs font-semibold uppercase tracking-wide outline-none transition hover:bg-black/5 disabled:cursor-default disabled:opacity-60"
+    <div className="flex flex-col items-center gap-3">
+      {/* The delay dropdown, reading as the full sentence ("Notify me again
+          in 2 hours"). It is ONLY a picker — an invisible native select covers
+          the pill, so anywhere on it opens the picker; the button below
+          schedules. */}
+      <div className="relative flex items-center gap-1.5 rounded-full border border-black/15 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-text transition hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10">
+        Notify me again {choice.label}
+        <ChevronDownIcon className="h-3.5 w-3.5" />
+        <select
+          value={key}
+          onChange={(e) => {
+            setKey(e.target.value);
+            setStatus("idle");
+          }}
+          aria-label="Change reminder time"
+          className="absolute inset-0 cursor-pointer opacity-0"
         >
-          {status === "busy" ? "Scheduling…" : `Notify me again ${choice.label}`}
-        </button>
-        <div className="relative flex items-center border-l border-black/10 px-3 transition hover:bg-black/5">
-          <ChevronDownIcon className="h-4 w-4" />
-          <select
-            value={key}
-            onChange={(e) => {
-              setKey(e.target.value);
-              setStatus("idle");
-            }}
-            aria-label="Change reminder time"
-            className="absolute inset-0 cursor-pointer opacity-0"
-          >
-            {Object.entries(options).map(([k, c]) => (
-              <option key={k} value={k}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        </div>
+          {Object.entries(options).map(([k, c]) => (
+            <option key={k} value={k}>
+              {c.label}
+            </option>
+          ))}
+        </select>
       </div>
       {choice.days && (
         <label className="flex items-baseline gap-2 text-sm text-muted">
@@ -126,6 +120,9 @@ export function ReminderScheduler() {
           />
         </label>
       )}
+      <Button variant="primary" onClick={schedule} disabled={status === "busy"}>
+        {status === "busy" ? "Scheduling…" : "Set reminder"}
+      </Button>
       {status === "failed" && (
         <p className="text-xs text-red-500">Couldn't schedule — check notification permission.</p>
       )}

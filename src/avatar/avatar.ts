@@ -35,6 +35,15 @@ const clampOffset = (v: number) => Math.max(-MAX_OFFSET, Math.min(MAX_OFFSET, v)
 const TORSO_ZOOM_DEADBAND = 0.03;
 const TORSO_ZOOM_K = 0.08;
 
+// Celebration (one-shot, celebrate()): the whole figure hops and rocks for a
+// few seconds — kicked off with the confetti burst / success flourish —
+// easing out as it lands. The face stays fully tracked; the tracked pose
+// keeps driving underneath, so control returns seamlessly.
+const CELEBRATE_S = 5;
+const CELEBRATE_HOPS_PER_S = 2.5;
+const CELEBRATE_HOP_Y = 0.3;
+const CELEBRATE_ROCK_RAD = 0.09;
+
 export class Avatar {
   private renderer: THREE.WebGLRenderer;
   // Protected so game subclasses can add scene content (e.g. Chomp's falling
@@ -49,6 +58,10 @@ export class Avatar {
   // shrug (which only tilts the torso) doesn't rotate the head.
   protected bodyGroup = new THREE.Group(); // sway
   protected torsoGroup = new THREE.Group(); // tilt (shoulders + arms)
+  // Carries head + body together. Identity except while celebrating, when the
+  // whole figure hops/rocks — a wrapper the per-frame pose writes never touch
+  // (the same parent-group trick the game avatars use).
+  protected figureGroup = new THREE.Group();
   // Resting reading captured at calibration, so neutral = centered/straight.
   private bodyNeutral = { tilt: 0, sway: 0, centerY: 0, width: 0 };
   private canvas: HTMLCanvasElement;
@@ -76,6 +89,9 @@ export class Avatar {
   private resizeHandler = (): void => this.resize();
   private rafId = 0;
   private disposed = false;
+  // Seconds into the celebration; negative = not celebrating.
+  private celebrateT = -1;
+  private lastFrameMs = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -104,10 +120,11 @@ export class Avatar {
     this.bodyGroup.add(this.torsoGroup);
     this.buildBody();
     this.buildHead();
-    // Head and torso are independent — added to the scene separately, no shared
-    // transform. The head never sways or tilts with the body.
-    this.scene.add(this.headPivot);
-    this.scene.add(this.bodyGroup);
+    // Head and torso stay independent — no shared transform between them; the
+    // head never sways or tilts with the body. Both ride figureGroup, which is
+    // identity except during a celebration.
+    this.figureGroup.add(this.headPivot, this.bodyGroup);
+    this.scene.add(this.figureGroup);
 
     this.resize();
     window.addEventListener("resize", this.resizeHandler);
@@ -220,6 +237,12 @@ export class Avatar {
     this.targetFace = f;
   }
 
+  /** Play the completion celebration: a few happy hops with a side-to-side
+   *  rock, easing out over CELEBRATE_S. One-shot; re-callable. */
+  celebrate(): void {
+    this.celebrateT = 0;
+  }
+
   /** Render the (smoothed) expression. Base look has no expression geometry;
    * subclasses with mouth/eye meshes override this. */
   protected applyFace(_f: FaceExpression): void {}
@@ -269,6 +292,9 @@ export class Avatar {
 
   private renderLoop = (): void => {
     if (this.disposed) return;
+    const now = performance.now();
+    const dt = Math.min(0.05, this.lastFrameMs ? (now - this.lastFrameMs) / 1000 : 0);
+    this.lastFrameMs = now;
     // Smooth toward target for a less jittery feel.
     const k = 0.35;
     this.cur.x += (this.target.x - this.cur.x) * k;
@@ -298,6 +324,22 @@ export class Avatar {
     // grow when the head leans in.
     this.curZoom += (this.targetZoom - this.curZoom) * k;
     this.headPivot.scale.setScalar(this.curZoom);
+
+    // Celebration: hop + rock the whole figure, easing out; the pose writes
+    // above keep landing on head/body, so tracking resumes seamlessly.
+    if (this.celebrateT >= 0) {
+      this.celebrateT += dt;
+      if (this.celebrateT >= CELEBRATE_S) {
+        this.celebrateT = -1;
+        this.figureGroup.position.y = 0;
+        this.figureGroup.rotation.z = 0;
+      } else {
+        const decay = 1 - this.celebrateT / CELEBRATE_S;
+        const phase = Math.PI * CELEBRATE_HOPS_PER_S * this.celebrateT;
+        this.figureGroup.position.y = Math.abs(Math.sin(phase)) * CELEBRATE_HOP_Y * decay;
+        this.figureGroup.rotation.z = Math.sin(phase) * CELEBRATE_ROCK_RAD * decay;
+      }
+    }
 
     // Expression: same smoothing so blinks don't strobe the geometry.
     this.curFace.mouthOpen += (this.targetFace.mouthOpen - this.curFace.mouthOpen) * k;

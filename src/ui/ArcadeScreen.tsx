@@ -1,22 +1,18 @@
 // The arcade — one WarioWare-style run, no game picker. ONE tracking session
-// (camera + models) starts on arrival and stays live for the whole visit;
-// the plain-TS ArcadeDirector is the session's frame sink and owns the run
-// (nod-wait → stats → prompt → playing → result → …). This component is only
-// chrome: it renders the director's coarse snapshots (phase changes and
-// whole-second ticks — never per-frame data) as the cutscene cards, countdown
-// ring, and end screens. Games draw themselves: each attaches its own Avatar
-// subclass to the playfield canvas via the shared session.
+// (camera + models, via the shared useTrackingSession hook) starts on arrival
+// and stays live for the whole visit; the plain-TS ArcadeDirector is the
+// session's frame sink and owns the run (nod-wait → stats → prompt → playing →
+// result → …). This component is only chrome: it renders the director's coarse
+// snapshots (phase changes and whole-second ticks — never per-frame data) as
+// the cutscene cards, countdown ring, and end screens. Games draw themselves:
+// each attaches its own Avatar subclass to the playfield canvas via the shared
+// session. The waiting screen is the shared SessionLobby; during a run the
+// lobby (and its mesh avatar) unmounts, releasing the session for the games.
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeftIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
-import { ThemeIconButton } from "./ThemeIconButton.tsx";
 import { Button } from "./Button.tsx";
-import { MusicPlayer } from "./MusicPlayer.tsx";
-import { ConfettiBurst } from "./ConfettiBurst.tsx";
+import { SessionLobby, SessionShell, useTrackingSession } from "./SessionScreen.tsx";
 import { arcadeMusicPlayer } from "../audio/player.ts";
-import { cameraErrorMessage } from "./cameraError.ts";
-import { TrackingSession } from "../tracking/session.ts";
-import { AbstractAvatar } from "../avatar/AbstractAvatar.ts";
 import {
   ArcadeDirector,
   GAME_MS,
@@ -29,95 +25,37 @@ import {
   type ArcadeSnapshot,
 } from "../minigames/director.ts";
 
-// Cap per-frame elapsed time so a background-tab gap can't teleport gameplay.
-const MAX_DT = 100;
-
 // Countdown ring geometry (the routine timer ring, arcade-sized).
 const RING_R = 26;
 const RING_C = 2 * Math.PI * RING_R;
 
 export function ArcadeScreen({ onExit }: { onExit: () => void }) {
-  const [shown, setShown] = useState(false);
-  const [status, setStatus] = useState("");
-  const [ready, setReady] = useState(false); // first calibration landed
-  // Recenter fades in a beat after ready — let the mesh settle in first.
-  const [showRecenter, setShowRecenter] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [arc, setArc] = useState<ArcadeSnapshot | null>(null);
-
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const avatarRef = useRef<HTMLCanvasElement>(null);
   const playfieldRef = useRef<HTMLCanvasElement>(null);
-  const sessionRef = useRef<TrackingSession | null>(null);
   const directorRef = useRef<ArcadeDirector | null>(null);
-  const lastTs = useRef(0);
 
-  const phase = arc?.phase ?? "nod-wait";
-  const nodWait = phase === "nod-wait";
+  const screen = useTrackingSession({
+    music: arcadeMusicPlayer,
+    onFrame: (f, dt) => directorRef.current?.update(f, dt),
+  });
+  const { session } = screen;
 
+  // The director lives exactly as long as the session. It is the frame sink;
+  // React only hears its coarse snapshots.
   useEffect(() => {
-    const id = requestAnimationFrame(() => setShown(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
-
-  // Session + director live exactly as long as the arcade. The director is the
-  // frame sink; React only hears its coarse snapshots.
-  useEffect(() => {
-    const session = new TrackingSession({
-      onStatus: setStatus,
-      onCalibrated: () => setReady(true),
-      onFrame: (f) => {
-        const now = performance.now();
-        const dt = Math.min(MAX_DT, lastTs.current ? now - lastTs.current : 0);
-        lastTs.current = now;
-        directorRef.current?.update(f, dt);
-      },
-    });
-    sessionRef.current = session;
+    if (!session) return;
     const director = new ArcadeDirector(session, () => playfieldRef.current);
     directorRef.current = director;
     const unsub = director.subscribe(setArc);
-    session.start(videoRef.current!).catch((err) => {
-      console.error("arcade start failed:", err);
-      setError(cameraErrorMessage(err));
-    });
     return () => {
       unsub();
       director.dispose();
       directorRef.current = null;
-      session.stop();
-      sessionRef.current = null;
-      arcadeMusicPlayer.stop();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [session]);
 
-  // Once the camera is calibrated the arcade comes alive: the mesh avatar
-  // settles (same model as the play screen) and the arcade music starts.
-  // `ready` flips exactly once per visit, so this can't retrigger a paused
-  // player. (Autoplay is safe — getting here took a click.)
-  useEffect(() => {
-    if (ready) arcadeMusicPlayer.play();
-  }, [ready]);
-
-  useEffect(() => {
-    if (!ready) return;
-    const t = setTimeout(() => setShowRecenter(true), 1000);
-    return () => clearTimeout(t);
-  }, [ready]);
-
-  // The waiting screen owns the mesh avatar; during a run the games attach
-  // their own to the playfield canvas, so release before the first create().
-  // Attached from mount — pre-calibration the mesh is the loading indicator
-  // (glow pulse).
-  useEffect(() => {
-    if (!nodWait || error) return;
-    const session = sessionRef.current;
-    if (!session || !avatarRef.current) return;
-    session.attachAvatar(avatarRef.current, AbstractAvatar);
-    return () => session.detachAvatar();
-  }, [nodWait, error]);
-
+  const phase = arc?.phase ?? "nod-wait";
+  const nodWait = phase === "nod-wait";
   const level = arc?.level ?? 1;
   const lives = arc?.lives ?? START_LIVES;
   const def = arc?.def ?? null;
@@ -125,92 +63,20 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
   const ended = phase === "gameover" || phase === "win";
 
   return (
-    <div
-      className={`relative flex min-h-screen flex-col items-center justify-center gap-8 bg-bg px-6 pb-24 text-text transition-opacity duration-500 ${
-        shown ? "opacity-100" : "opacity-0"
-      }`}
+    <SessionShell
+      onExit={onExit}
+      screen={screen}
+      music={arcadeMusicPlayer}
+      celebrate={phase === "win"}
     >
-      {/* Detection source — never shown, alive for the whole arcade visit. */}
-      <video ref={videoRef} autoPlay playsInline muted className="hidden" />
-
-      <div className="absolute right-4 top-4">
-        <ThemeIconButton />
-      </div>
-
-      {/* Back — out of the arcade (mid-run too; the run has no pause). */}
-      <button
-        onClick={onExit}
-        aria-label="Back to home"
-        className="absolute left-4 top-4 rounded-full p-2 text-muted transition hover:bg-black/5 hover:text-text dark:hover:bg-white/10"
-      >
-        <ArrowLeftIcon className="h-5 w-5" />
-      </button>
-
       {nodWait ? (
-        <>
-          {/* The mesh avatar — visible from the start. While the models load
-              and neutral is captured, the model pulses (opacity breathing —
-              the loading indicator); once calibration lands it settles to
-              full opacity, live. */}
-          {!error && (
-            <div className="relative aspect-[4/3] w-full max-w-sm">
-              <canvas
-                ref={avatarRef}
-                className={`pointer-events-none absolute inset-0 h-full w-full transition-opacity duration-700 ${
-                  ready ? "" : "animate-pulse"
-                }`}
-              />
-            </div>
-          )}
-
-          {error ? (
-            <div className="flex flex-col items-center gap-3 text-center">
-              <ExclamationTriangleIcon className="h-10 w-10 text-red-500" />
-              <span className="text-sm font-medium text-text">Camera unavailable</span>
-              <span className="text-xs text-muted">{error}</span>
-            </div>
-          ) : (
-            <>
-              {/* The invite appears with calibration; the status line holds
-                  its space while loading so nothing jumps. */}
-              <div className="flex flex-col items-center gap-2 text-center">
-                {ready ? (
-                  <div className="animate-[fade-in_0.5s_ease]">
-                    <p className="text-2xl font-semibold text-text">Nod to start</p>
-                    <p className="mt-1 text-sm text-muted">
-                      {MAX_LEVEL} rounds · {GAMES_PER_ROUND} games each · {START_LIVES} lives
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted" aria-live="polite">
-                    {status || "Starting camera…"}
-                  </p>
-                )}
-              </div>
-              {/* Recenter (and a click fallback for the nod) fade in a beat
-                  after tracking is ready. */}
-              <div className="flex h-9 items-center justify-center gap-3">
-                {showRecenter && (
-                  <>
-                    <Button
-                      onClick={() => sessionRef.current?.recenter()}
-                      className="animate-[fade-in_0.5s_ease]"
-                    >
-                      Recenter
-                    </Button>
-                    <Button
-                      variant="primary"
-                      onClick={() => directorRef.current?.startRun()}
-                      className="animate-[fade-in_0.5s_ease]"
-                    >
-                      Start
-                    </Button>
-                  </>
-                )}
-              </div>
-            </>
-          )}
-        </>
+        <SessionLobby
+          title="Minigame Arcade"
+          subtitle={`${MAX_LEVEL} rounds · ${GAMES_PER_ROUND} games each · ${START_LIVES} lives`}
+          screen={screen}
+          onStart={() => directorRef.current?.startRun()}
+          onExit={onExit}
+        />
       ) : (
         <>
           {/* The playfield. The canvas is keyed per game so every microgame
@@ -384,23 +250,9 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
           </div>
 
           {/* Recenter — the lean baseline can drift over a 9-minute run. */}
-          {running && (
-            <Button onClick={() => sessionRef.current?.recenter()}>Recenter</Button>
-          )}
+          {running && <Button onClick={() => session?.recenter()}>Recenter</Button>}
         </>
       )}
-
-      {phase === "win" && <ConfettiBurst />}
-
-      {/* Music pill: hidden until the camera is ready and the music has kicked
-          in; stays through the whole run (the queue is arcade-wide). */}
-      <div
-        className={`absolute bottom-4 right-4 transition-opacity duration-700 ${
-          ready ? "opacity-100" : "pointer-events-none opacity-0"
-        }`}
-      >
-        <MusicPlayer player={arcadeMusicPlayer} />
-      </div>
-    </div>
+    </SessionShell>
   );
 }
