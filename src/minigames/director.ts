@@ -17,7 +17,13 @@
 import { arcadeMusicPlayer } from "../audio/player.ts";
 import { playCelebrate, playDone, playFail } from "../audio/sfx.ts";
 import type { FrameResult, TrackingSession } from "../tracking/session.ts";
-import { MICROGAMES, type Level, type Microgame, type MicrogameDef } from "./registry.ts";
+import {
+  MICROGAMES,
+  gameDurationMs,
+  type Level,
+  type Microgame,
+  type MicrogameDef,
+} from "./registry.ts";
 
 // Cutscene beat lengths (ms). Exported so the React chrome can size its CSS
 // card animations to exactly one phase.
@@ -82,12 +88,33 @@ export class ArcadeDirector {
   private lastHud = "";
   private listeners = new Set<(s: ArcadeSnapshot) => void>();
 
+  private startLevel: Level = 1;
+  private enabledIds: ReadonlySet<string> | null = null; // null = all games
+
   constructor(
     private session: TrackingSession,
     // Resolved lazily: React mounts the playfield canvas when the run starts
     // (phase leaves nod-wait), a couple of seconds before the first create().
     private canvas: () => HTMLCanvasElement | null,
   ) {}
+
+  /** Dev panel: restrict the bag to these game ids (empty/unknown = all). */
+  setEnabledGames(ids: readonly string[]): void {
+    const set = new Set(ids);
+    this.enabledIds = MICROGAMES.some((d) => set.has(d.id)) ? set : null;
+    // Drop queued games that are no longer enabled; the bag refills filtered.
+    this.bag = this.bag.filter((d) => !this.enabledIds || this.enabledIds.has(d.id));
+  }
+
+  /** Dev panel: jump the run to this level — runs start here, and mid-run the
+   * NEXT game is created at it (the running game keeps its level). */
+  setLevel(l: Level): void {
+    this.startLevel = l;
+    if (this.level !== l) {
+      this.level = l;
+      this.emit();
+    }
+  }
 
   get snapshot(): ArcadeSnapshot {
     return {
@@ -113,7 +140,7 @@ export class ArcadeDirector {
   /** Kick off a run — the nod does this, or a button as the fallback. */
   startRun(): void {
     if (this.phase !== "nod-wait" && this.phase !== "gameover" && this.phase !== "win") return;
-    this.level = 1;
+    this.level = this.startLevel;
     this.gameNum = 1;
     this.lives = START_LIVES;
     this.score = 0;
@@ -177,9 +204,14 @@ export class ArcadeDirector {
     }
   }
 
-  // No repeats until the bag of every registered game empties, then reshuffle.
+  // No repeats until the bag of every enabled game empties, then reshuffle.
   private drawNext(): void {
-    if (this.bag.length === 0) this.bag = shuffle([...MICROGAMES]);
+    if (this.bag.length === 0) {
+      const pool = this.enabledIds
+        ? MICROGAMES.filter((d) => this.enabledIds!.has(d.id))
+        : [...MICROGAMES];
+      this.bag = shuffle(pool);
+    }
     this.def = this.bag.pop()!;
     this.plays += 1;
   }
@@ -188,7 +220,7 @@ export class ArcadeDirector {
     const canvas = this.canvas();
     if (!canvas || !this.def) return;
     this.game = this.def.create(canvas, this.session, this.level);
-    this.timerMs = GAME_MS;
+    this.timerMs = gameDurationMs(this.def, this.level) || GAME_MS;
     this.lastSecond = -1;
     this.lastHud = "";
     this.setPhase("playing");

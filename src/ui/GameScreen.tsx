@@ -1,6 +1,6 @@
 // The game screen — a placeholder for now, with the theme toggle top-right.
 // This is where the session, avatar, note highway, and React HUD will come
-// together. The dev page (#dev) keeps the real tracking UI.
+// together. The tracker page (#tracker) keeps the real tracking UI.
 
 import { useState } from "react";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
@@ -79,7 +79,8 @@ export function GameScreen({
           ["about", "About"],
           ["science", "Science"],
           ["credits", "Credits"],
-          ["dev", "Dev"],
+          ["tracker", "Tracker"],
+          ["practice", "Practice"],
         ].map(([hash, label]) => (
           <a key={hash} href={`#${hash}`} className="transition hover:text-text">
             {label}

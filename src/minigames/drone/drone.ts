@@ -49,7 +49,7 @@ const TANK_WANDER = 0.00035; // slow random heading drift, rad/ms
 
 // Per-level tuning, indexed by level-1.
 const SPEED = [0.009, 0.0095, 0.01, 0.0105, 0.011]; // world units per ms
-const QUOTA = [1, 1, 2, 2, 3];
+const QUOTA = [2, 3, 3, 4, 5];
 const TANK_V = [0.0008, 0.001, 0.0012, 0.0014, 0.0016]; // slow crawl
 
 interface Tank {
@@ -89,9 +89,11 @@ const FLAG_RISE_MS = 450;
 // then flips. (The director cuts to the result card the frame the outcome
 // changes, so reporting immediately would cut the scene off.)
 const WIN_OUTRO_MS = 1800;
-// The director's clock is 10s; the outro must resolve before it or a hit in
-// the final second would time out as a loss. Keep a safety margin.
-const GAME_CLOCK_MS = 10_000;
+// This game's clock, per level (declared as durationMs on the def — a
+// bigger quota needs a longer run than the standard 10s, and the higher
+// levels' quotas buy proportionally more time); the outro must resolve
+// before it or a hit in the final second would time out as a loss.
+const CLOCK_MS = [12_000, 13_500, 15_000, 16_500, 18_000];
 const OUTRO_MARGIN_MS = 250;
 
 class DroneMicrogame implements Microgame {
@@ -322,7 +324,7 @@ class DroneMicrogame implements Microgame {
     // timeout loss on a game that was actually won.
     if (this.winIn >= 0 && this._outcome === "pending") {
       this.winIn -= dt;
-      const clockLeft = GAME_CLOCK_MS - this.elapsed - OUTRO_MARGIN_MS;
+      const clockLeft = CLOCK_MS[this.level - 1] - this.elapsed - OUTRO_MARGIN_MS;
       if (this.winIn <= 0 || clockLeft <= 0) this._outcome = "win";
     }
 
@@ -486,10 +488,11 @@ class DroneMicrogame implements Microgame {
 
 export const droneDef: MicrogameDef = {
   id: "drone",
-  title: "Drop",
+  title: "Special Delivery",
   headline: "Ceasefire holding, says drone fleet",
   prompt: { lead: "steer in and", action: "DROP" },
   hint: "tilt to steer · open mouth to drop bombs",
+  durationMs: (level) => CLOCK_MS[level - 1],
   create(canvas, session, level) {
     const avatar = session.attachAvatar(canvas, DroneAvatar);
     return new DroneMicrogame(avatar, session, level);

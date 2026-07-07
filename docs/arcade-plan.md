@@ -1,5 +1,9 @@
 # Bop Arcade — WarioWare mode, 2026 edition
 
+> Building a new microgame? Follow `docs/microgame-authoring.md` — the
+> one-shot authoring guide (contract, avatar law, input patterns, judging
+> lessons, checklist).
+
 The arcade becomes a single WarioWare-style run: no game picker. Enter →
 camera calibrates (mesh pulses, then goes live; music starts) → "Nod to
 start" → cutscene → 10s microgame → cutscene → … Lives run out or round 5
@@ -65,18 +69,20 @@ open, chin tuck, hold-still.
 
 | # | Title | Headline (2026 flavor) | Prompt | Control / win | Level-5 twist |
 |---|-------|------------------------|--------|---------------|---------------|
-| 1 | Eat | Lab-grown burger cheaper than beef | open wide and **EAT** | tilt to slide, mouth to chomp falling food (= Chomp re-skinned) | faster drops, junk food to avoid |
+| 1 | All You Can Eat | Lab-grown burger cheaper than beef | open wide and **EAT** | tilt to slide, mouth to chomp falling food (= Chomp re-skinned) | faster drops, junk food to avoid |
 | 2 | Fake It Till You Make It | Hologram idol group tops charts | copy the **DANCE** | mirror the dancers' 3-move sequence in rhythm; win ≥2/3 | 5 moves, faster tempo |
-| 3 | Drone Drop | Ceasefire monitored by drone fleet | tilt to **STEER** | roll/yaw steers drone; drop payload on tank hatch | wind gusts, moving tank |
+| 3 | Special Delivery | Ceasefire monitored by drone fleet | tilt to **STEER** | roll/yaw steers drone; drop payload on tank hatch | wind gusts, moving tank |
 | 4 | Header! | World Cup final week | nod to **SCORE** | nod at the right instant to head the cross past the keeper | faster crosses, 2 goals needed |
 | 5 | Balance | Leaders' banquet, one long table | tilt to **BALANCE** | head roll keeps plate stack upright on rocking floor; survive 10s | taller stack, stronger shoves |
-| 6 | Rush Hour | Robotaxis outnumber drivers | lean to **DODGE** | lean to dodge robotaxis, nod to jump curbs; survive | denser traffic, double obstacles |
+| 6 | Jaywalker | Robotaxis outnumber drivers | lean to **DODGE** | lean to dodge robotaxis, nod to jump curbs; survive | denser traffic, double obstacles |
 | 7 | AI Says | 'Assistant Act': AIs must say please | obey **AI SAYS** | do only "AI says"-prefixed commands; ≤1 mistake | faster commands, sneakier traps |
 | 8 | Touchdown | Third private Moon lander this year | open to **BURN** | mouth open = thruster; land soft, don't run out of fuel | less fuel, boulder field (tilt to drift) |
 | 9 | Slalom | Milan-Cortina stars go pro | carve the **SLALOM** | roll to carve through gates; miss ≤1 | tighter offset gates, ice patches |
 | 10 | Space Junk | Orbit cleanup treaty | turn to **CATCH** | yaw aims the net at drifting debris; catch N | smaller faster junk, decoy satellites |
 | 11 | Limbo | Debt ceiling bar keeps dropping | tuck to **LIMBO** | chin-tuck to slip under the sweeping bar (flagship health move) | lower bar, double-tuck rhythm |
 | 12 | Stay Live | Anchor's 36th straight hour | hold **STEADY** | keep head level/still while the studio shakes | narrower band, jump scares |
+| 13 | Green Light, Red Light | Killer doll wins daytime TV, again | shake to **RUN** | head-shakes pump a run charge; freeze when the doll turns; reach the line | longer course, shorter greens/graces |
+| 14 | Prove You're Human | CAPTCHA v9 requires interpretive dance | memorize, then **MIMIC** | cards reveal a move sequence for 3s, flip down; perform from memory, two tries per card | 6-card sequence |
 
 Spares (road to 30): Stamp It (nod-stamp election ballots on a conveyor),
 Sun Chaser (tilt solar panel to track the sun), Splashdown (lean capsule

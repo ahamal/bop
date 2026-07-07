@@ -408,7 +408,7 @@ class ChompMicrogame implements Microgame {
 
 export const chompDef: MicrogameDef = {
   id: "chomp",
-  title: "Eat",
+  title: "All You Can Eat",
   headline: "Lab-grown burger now cheaper than beef",
   prompt: { lead: "open wide and", action: "EAT" },
   hint: "lean to slide · chomp the fruit · don't eat the junk",

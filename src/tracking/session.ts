@@ -31,7 +31,19 @@ import { computeExpression, type FaceExpression } from "./face.ts";
 import type { HeadPose } from "./pose.ts";
 
 const CALIB_MS = 1500; // initial hold-still window
-const RECENTER_MS = 700; // shorter window when Recentering
+const RECENTER_MS = 700; // shorter window for settle-mode recenters
+// Instant (button) recenters assume the user is ALREADY in their best
+// position: give them a beat to come back to center, then take a quick
+// average of wherever the head is — no stillness gating at all. Buttons get
+// hit mid-action; making them wait for stillness is wrong.
+const RECENTER_COMEBACK_MS = 500;
+const RECENTER_INSTANT_MS = 400;
+const INSTANT_MIN_SAMPLES = 4; // enough frames to average out one jitter
+// Stillness is a preference, not a gate: if the head never settles (a moving
+// user on the tracker page would otherwise reset the window forever), finalize
+// at this deadline on the best mean gathered — an imperfect neutral beats a
+// frozen avatar, and Recenter exists to fix it properly.
+const CALIB_MAX_MS = 5000;
 // Ignore the first frames after the camera opens: auto-exposure is still
 // settling and the tracker's first reads are jumpy, so sampling them skewed
 // the initial neutral (the "starts out of whack" recentering). Recenter skips
@@ -47,7 +59,23 @@ const CALIB_SETTLE_MS = 800;
 // 2.5°/frame ≈ 75°/s at 30fps let those through, skewing relax recenters).
 const CALIB_STILL_DPS = 30;
 const CALIB_MIN_SAMPLES = 10; // don't finalize until this many head reads land
+// When a body is in frame, the window must also bank this many body samples
+// before finalizing — otherwise a (re)calibration can move the HEAD neutral
+// while keeping a stale BODY neutral, and the avatar's torso detaches from
+// its head. The CALIB_MAX_MS deadline still caps the wait if the body
+// tracker won't deliver confident reads.
+const CALIB_MIN_BODY_SAMPLES = 5;
 const BODY_MIN_CONFIDENCE = 0.5; // shoulders below this don't back a depth read
+// Presence: how the session tells the UI whether framing is workable, so the
+// lobby can pop a webcam preview with guidance instead of sitting silent.
+// A face frame this stale means the player left the frame (grace over momentary
+// tracker dropouts — a single missed frame shouldn't flash the warning).
+const FACE_LOST_MS = 2000;
+// Face bounding-box width as a fraction of the frame above which the player is
+// too close for reliable tracking. Hysteresis (on above, off below) so a face
+// hovering at the line doesn't flicker the warning.
+const TOO_CLOSE_ON = 0.5;
+const TOO_CLOSE_OFF = 0.44;
 
 /** Everything one detected frame produces, for whoever's rendering it. */
 export interface FrameResult {
@@ -77,12 +105,37 @@ export interface FrameResult {
   fps: number;
 }
 
+/** Whether the player is framed well enough to track. */
+export interface Presence {
+  /** A face has been seen within the grace window. */
+  detected: boolean;
+  /** Face fills too much of the frame for reliable tracking. */
+  tooClose: boolean;
+}
+
 export interface SessionHandlers {
   onFrame?(result: FrameResult): void;
   onStatus?(text: string): void;
   /** Fired when neutral is (re)captured. isRecenter = false for the first capture. */
   onCalibrated?(isRecenter: boolean): void;
+  /** Fired when framing quality changes (face lost/found, too close/backed off). */
+  onPresence?(p: Presence): void;
 }
+
+// Normalized bounding box of the face landmarks — its width is the
+// closeness signal, the box itself the preview overlay.
+const faceBounds = (
+  landmarks: Frame["landmarks"],
+): { x: number; y: number; w: number; h: number } => {
+  let minX = 1, minY = 1, maxX = 0, maxY = 0;
+  for (const p of landmarks) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+};
 
 const relativeTo = (pose: HeadPose, ref: HeadPose): HeadPose => ({
   yaw: pose.yaw - ref.yaw,
@@ -132,7 +185,9 @@ export class TrackingSession {
   private calibrating = false;
   private calibSampleStart = 0; // frames before this are warm-up, not samples
   private calibEndTime = 0;
+  private calibDeadline = 0; // finalize by here even if the head never settles
   private calibIsRecenter = false;
+  private calibInstant = false; // button recenter: no stillness gating
   private calibPrevPose: HeadPose | null = null; // last pose, for the stillness check
   private calibPrevTime = 0; // when it was read (the rate's denominator)
   // False until the FIRST calibration lands. Until then the avatar is held in
@@ -140,6 +195,12 @@ export class TrackingSession {
   // driving it would just replay the settling-in wobble. Recenters (neutral
   // already exists) keep the avatar live.
   private hasNeutral = false;
+
+  // Presence state — when the face was last seen, its bounding box (normalized,
+  // for the preview's tracking overlay), and the last state told to the UI.
+  private lastFaceTime = 0;
+  private faceBox: { x: number; y: number; w: number; h: number } | null = null;
+  private presence: Presence = { detected: true, tooClose: false };
 
   private running = false;
   private fps = 0;
@@ -218,14 +279,23 @@ export class TrackingSession {
     await video.play();
 
     this.running = true;
+    // Start the lost-face clock at camera-open, so "not detected" only shows
+    // after the grace window of genuinely seeing nothing.
+    this.lastFaceTime = performance.now();
     this.startCalibration(false);
     requestAnimationFrame(this.loop);
   }
 
-  /** Re-average neutral over a shorter window. No-op while already calibrating. */
-  recenter(): void {
+  /**
+   * Re-average neutral. "instant" (the default — the Recenter buttons)
+   * assumes the user is already in their best position: a short come-back
+   * delay, then a quick average, no stillness gating. "settle" (the
+   * routine's relax cards) waits for a genuinely still head, like the
+   * initial calibration. No-op while already calibrating.
+   */
+  recenter(mode: "instant" | "settle" = "instant"): void {
     if (this.calibrating) return;
-    this.startCalibration(true);
+    this.startCalibration(true, mode === "instant");
   }
 
   /** Stop the loop, release the camera, and tear down the avatar. */
@@ -241,21 +311,28 @@ export class TrackingSession {
     this.handlers.onStatus?.(text);
   }
 
-  // Begin a hold-still window; the loop samples and finalizes when it elapses.
-  private startCalibration(isRecenter: boolean): void {
+  // Begin a calibration window; the loop samples and finalizes when it
+  // elapses. instant = no stillness gating (button recenters).
+  private startCalibration(isRecenter: boolean, instant = false): void {
     this.calib.reset();
     this.calibrating = true;
     this.calibIsRecenter = isRecenter;
+    this.calibInstant = instant;
     this.calibPrevPose = null;
     this.calibPrevTime = 0;
     this.calibSampleStart =
-      performance.now() + (isRecenter ? 0 : CALIB_SETTLE_MS);
+      performance.now() +
+      (instant ? RECENTER_COMEBACK_MS : isRecenter ? 0 : CALIB_SETTLE_MS);
     this.calibEndTime =
-      this.calibSampleStart + (isRecenter ? RECENTER_MS : CALIB_MS);
+      this.calibSampleStart +
+      (instant ? RECENTER_INSTANT_MS : isRecenter ? RECENTER_MS : CALIB_MS);
+    this.calibDeadline = this.calibSampleStart + CALIB_MAX_MS;
     this.status(
-      isRecenter
-        ? "Hold still — recentering…"
-        : "Hold still — calibrating neutral pose…",
+      instant
+        ? "Recentering…"
+        : isRecenter
+          ? "Hold still — recentering…"
+          : "Hold still — calibrating neutral pose…",
     );
   }
 
@@ -290,6 +367,11 @@ export class TrackingSession {
 
     const frame = this.tracker.detect(video, now);
     if (frame) {
+      this.lastFaceTime = now;
+      this.faceBox = faceBounds(frame.landmarks);
+    }
+    this.updatePresence(now);
+    if (frame) {
       if (this.calibrating) {
         const prev = this.calibPrevPose;
         const prevT = this.calibPrevTime;
@@ -301,12 +383,22 @@ export class TrackingSession {
             Math.abs(frame.pose.roll - prev.roll)
           : 0;
         const rate = prev && now > prevT ? (moved / (now - prevT)) * 1000 : 0;
-        if (now < this.calibSampleStart) {
+        if (now >= this.calibDeadline) {
+          // The head never settled — take the best mean gathered (or, with no
+          // still samples at all, the live pose) and go live. Recenter fixes a
+          // rough neutral; an endless hold-still reset loop fixes nothing.
+          if (this.calib.headCount > 0) this.neutral = this.calib.headMean()!;
+          else this.neutral = frame.pose;
+          this.finishCalibration();
+        } else if (now < this.calibSampleStart) {
           // Warm-up: don't sample, but pin neutral to the live pose so a
           // visible avatar rests centered instead of swinging on a stale zero.
           this.neutral = frame.pose;
-        } else if (rate > CALIB_STILL_DPS) {
-          // Still moving — throw the window away and wait for a still head.
+        } else if (rate > CALIB_STILL_DPS && !this.calibInstant) {
+          // Still moving — throw the window away and wait for a still head
+          // (the CALIB_MAX_MS deadline above stops this from looping
+          // forever if the head never settles). Instant recenters skip this
+          // entirely: the user said "here", so here is what we average.
           this.calib.reset();
           this.calibEndTime =
             now + (this.calibIsRecenter ? RECENTER_MS : CALIB_MS);
@@ -325,7 +417,17 @@ export class TrackingSession {
               this.avatar?.calibrateBody(bm);
             }
           }
-          if (now >= this.calibEndTime && this.calib.headCount >= CALIB_MIN_SAMPLES) {
+          // Body-in-frame calibrations also wait for enough body samples, so
+          // head and body neutrals always move TOGETHER (no body ever seen =
+          // nothing to wait for; the deadline covers a body that won't read).
+          // Instant recenters don't wait for anything — the window's own
+          // ~400ms banks body reads when the tracker is delivering.
+          const bodyReady =
+            this.calibInstant ||
+            !this.latestBody ||
+            this.calib.bodyCount >= CALIB_MIN_BODY_SAMPLES;
+          const minHead = this.calibInstant ? INSTANT_MIN_SAMPLES : CALIB_MIN_SAMPLES;
+          if (now >= this.calibEndTime && this.calib.headCount >= minHead && bodyReady) {
             this.finishCalibration();
           }
         }
@@ -369,18 +471,71 @@ export class TrackingSession {
     requestAnimationFrame(this.loop);
   };
 
-  // Mirror the source video into the preview canvas (selfie view).
+  // Reassess framing and tell the UI only when the verdict changes.
+  private updatePresence(now: number): void {
+    const detected = now - this.lastFaceTime < FACE_LOST_MS;
+    let tooClose = this.presence.tooClose;
+    if (detected && this.faceBox) {
+      // Hysteresis: engage above ON, release below OFF.
+      if (this.faceBox.w > TOO_CLOSE_ON) tooClose = true;
+      else if (this.faceBox.w < TOO_CLOSE_OFF) tooClose = false;
+    }
+    if (!detected) tooClose = false;
+    if (detected !== this.presence.detected || tooClose !== this.presence.tooClose) {
+      this.presence = { detected, tooClose };
+      this.handlers.onPresence?.(this.presence);
+    }
+  }
+
+  // Mirror the source video into the preview canvas (selfie view). The canvas
+  // is sized to its on-screen box (so it can sit pixel-for-pixel over the
+  // avatar frame) and the video is cover-cropped into it, never stretched.
   private drawPreview(): void {
     const p = this.preview;
     const v = this.video;
     if (!p || !v || !v.videoWidth) return;
-    if (p.canvas.width !== v.videoWidth) p.canvas.width = v.videoWidth;
-    if (p.canvas.height !== v.videoHeight) p.canvas.height = v.videoHeight;
     const { ctx, canvas } = p;
+    const dpr = window.devicePixelRatio || 1;
+    const cw = Math.round(canvas.clientWidth * dpr);
+    const ch = Math.round(canvas.clientHeight * dpr);
+    if (!cw || !ch) return;
+    if (canvas.width !== cw) canvas.width = cw;
+    if (canvas.height !== ch) canvas.height = ch;
+    // Cover mapping: scale to fill, center the crop.
+    const scale = Math.max(cw / v.videoWidth, ch / v.videoHeight);
+    const dw = v.videoWidth * scale;
+    const dh = v.videoHeight * scale;
+    const ox = (cw - dw) / 2;
+    const oy = (ch - dh) / 2;
     ctx.save();
-    ctx.translate(canvas.width, 0);
+    ctx.translate(cw, 0);
     ctx.scale(-1, 1);
-    ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(v, ox, oy, dw, dh);
+    // Tracking box: the "you're being tracked" signal. Drawn inside the mirror
+    // transform so it stays glued to the face in the selfie view.
+    if (this.faceBox && performance.now() - this.lastFaceTime < FACE_LOST_MS) {
+      const b = this.faceBox;
+      const pad = 0.04; // breathing room so the box frames, not clips, the face
+      ctx.strokeStyle = this.presence.tooClose ? "#f59e0b" : "#34d399";
+      ctx.lineWidth = 3 * dpr;
+      ctx.strokeRect(
+        ox + (b.x - pad) * dw,
+        oy + (b.y - pad) * dh,
+        (b.w + pad * 2) * dw,
+        (b.h + pad * 2) * dh,
+      );
+      // Shoulder line — shows the torso is tracked too, and whether it's level.
+      const lm = this.latestBody?.landmarks2d;
+      const ls = lm?.[11]; // LEFT_SHOULDER / RIGHT_SHOULDER (MediaPipe pose)
+      const rs = lm?.[12];
+      if (ls && rs) {
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(ox + ls.x * dw, oy + ls.y * dh);
+        ctx.lineTo(ox + rs.x * dw, oy + rs.y * dh);
+        ctx.stroke();
+      }
+    }
     ctx.restore();
   }
 

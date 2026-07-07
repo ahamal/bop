@@ -394,7 +394,7 @@ class TaxiMicrogame implements Microgame {
 
 export const taxiDef: MicrogameDef = {
   id: "taxi",
-  title: "Dodge",
+  title: "Jaywalker",
   headline: "Robotaxi fleet ships 'assertive mode', pedestrians advised to hustle",
   prompt: { lead: "lean and jump to", action: "DODGE" },
   hint: "lean to switch lanes · look up to jump the hurdles",

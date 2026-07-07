@@ -23,7 +23,7 @@ import { MusicPlayer } from "./MusicPlayer.tsx";
 import { ConfettiBurst } from "./ConfettiBurst.tsx";
 import { cameraErrorMessage } from "./cameraError.ts";
 import { musicPlayer } from "../audio/player.ts";
-import { TrackingSession, type FrameResult } from "../tracking/session.ts";
+import { TrackingSession, type FrameResult, type Presence } from "../tracking/session.ts";
 import { AbstractAvatar } from "../avatar/AbstractAvatar.ts";
 
 // Cap per-frame elapsed time so a background-tab gap can't teleport gameplay.
@@ -39,6 +39,8 @@ export interface TrackingScreen {
   status: string;
   /** First calibration landed — tracking is live. Flips once per visit. */
   ready: boolean;
+  /** Framing quality — drives the lobby's webcam-preview guidance. */
+  presence: Presence;
   error: string | null;
 }
 
@@ -49,13 +51,15 @@ export interface TrackingScreen {
  * session on unmount.
  */
 export function useTrackingSession(opts: {
-  music: Music;
+  /** Omit for silent screens (practice) — nothing plays, nothing to stop. */
+  music?: Music;
   onFrame: (f: FrameResult, dt: number) => void;
   onCalibrated?: (isRecenter: boolean) => void;
 }): TrackingScreen {
   const [session, setSession] = useState<TrackingSession | null>(null);
   const [status, setStatus] = useState("");
   const [ready, setReady] = useState(false);
+  const [presence, setPresence] = useState<Presence>({ detected: true, tooClose: false });
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastTs = useRef(0);
@@ -66,6 +70,7 @@ export function useTrackingSession(opts: {
   useEffect(() => {
     const s = new TrackingSession({
       onStatus: setStatus,
+      onPresence: setPresence,
       onCalibrated: (isRecenter) => {
         setReady(true);
         handlers.current.onCalibrated?.(isRecenter);
@@ -84,16 +89,16 @@ export function useTrackingSession(opts: {
     });
     return () => {
       s.stop();
-      handlers.current.music.stop();
+      handlers.current.music?.stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (ready) handlers.current.music.play();
+    if (ready) handlers.current.music?.play();
   }, [ready]);
 
-  return { session, videoRef, status, ready, error };
+  return { session, videoRef, status, ready, presence, error };
 }
 
 /** The chrome every session screen shares; screen content goes in children. */
@@ -106,7 +111,8 @@ export function SessionShell({
 }: {
   onExit: () => void;
   screen: TrackingScreen;
-  music: Music;
+  /** Omit for silent screens — the music pill stays hidden. */
+  music?: Music;
   /** Fire the full-screen confetti burst (routine complete / arcade win). */
   celebrate?: boolean;
   children: ReactNode;
@@ -144,13 +150,15 @@ export function SessionShell({
       {celebrate && <ConfettiBurst />}
 
       {/* Music pill: hidden until tracking is ready and the music kicked in. */}
-      <div
-        className={`absolute bottom-4 right-4 transition-opacity duration-700 ${
-          screen.ready ? "opacity-100" : "pointer-events-none opacity-0"
-        }`}
-      >
-        <MusicPlayer player={music} />
-      </div>
+      {music && (
+        <div
+          className={`absolute bottom-4 right-4 transition-opacity duration-700 ${
+            screen.ready ? "opacity-100" : "pointer-events-none opacity-0"
+          }`}
+        >
+          <MusicPlayer player={music} />
+        </div>
+      )}
     </div>
   );
 }
@@ -177,9 +185,26 @@ export function SessionLobby({
   onExit: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const previewRef = useRef<HTMLCanvasElement>(null);
   // Recenter/Start fade in a beat after ready — let the mesh settle in first.
   const [showButtons, setShowButtons] = useState(false);
-  const { session, status, ready, error } = screen;
+  const { session, status, ready, presence, error } = screen;
+
+  // Framing guidance: when the camera can't work with what it sees, swap the
+  // avatar for a live webcam preview (with a tracking box) and say what to fix.
+  const framingIssue = !presence.detected
+    ? "Body not detected — move back or stay within the frame"
+    : presence.tooClose
+      ? "Too close to the camera — move back a bit"
+      : null;
+  // Once shown, the preview stays up until calibration lands — fixing framing
+  // shouldn't bounce you back to the avatar mid-setup. After ready it only
+  // appears while an issue is live.
+  const [showPreview, setShowPreview] = useState(false);
+  useEffect(() => {
+    if (framingIssue) setShowPreview(true);
+    else if (ready) setShowPreview(false);
+  }, [framingIssue, ready]);
 
   useEffect(() => {
     if (!ready) return;
@@ -192,6 +217,12 @@ export function SessionLobby({
     session.attachAvatar(canvasRef.current, AbstractAvatar);
     return () => session.detachAvatar();
   }, [session, error]);
+
+  useEffect(() => {
+    if (!showPreview || !session || !previewRef.current) return;
+    session.attachPreview(previewRef.current);
+    return () => session.detachPreview();
+  }, [session, showPreview]);
 
   if (error) {
     return (
@@ -220,15 +251,35 @@ export function SessionLobby({
           ref={canvasRef}
           className={`pointer-events-none absolute inset-0 h-full w-full transition-opacity duration-700 ${
             ready ? "" : "animate-pulse"
-          }`}
+          } ${showPreview ? "opacity-0" : ""}`}
         />
+        {/* The webcam preview takes the avatar's place while framing is off —
+            seeing yourself (with the tracking box when a face is found) is the
+            fastest way to fix it. Same box as the avatar canvas, so the swap
+            back is seamless. */}
+        {/* A window centered where the figure stands, not the full container —
+            the container is oversized for canvas headroom (hence -mt-10), so
+            filling it reads huge next to the avatar. Sits below the title. */}
+        {showPreview && (
+          <canvas
+            ref={previewRef}
+            className="absolute left-1/2 top-[60%] aspect-[4/3] w-[88%] -translate-x-1/2 -translate-y-1/2 rounded-2xl"
+          />
+        )}
       </div>
 
       {/* The invite appears with calibration. Fixed height: the loading status
           line and the taller ready block (invite + subtitle) occupy the same
           space, so calibration landing doesn't shift the content. */}
       <div className="flex h-14 flex-col items-center justify-center text-center">
-        {ready ? (
+        {framingIssue ? (
+          <p
+            className="animate-[fade-in_0.5s_ease] text-sm font-medium text-amber-500"
+            aria-live="polite"
+          >
+            {framingIssue}
+          </p>
+        ) : ready ? (
           <div className="animate-[fade-in_0.5s_ease]">
             <p className="text-2xl font-semibold text-text">Nod to start</p>
             <p className="mt-1 text-sm text-muted">{subtitle}</p>

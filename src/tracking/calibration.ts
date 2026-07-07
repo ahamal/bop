@@ -29,6 +29,11 @@ export class Calibrator {
     return this.hN;
   }
 
+  /** Number of body samples gathered so far this window. */
+  get bodyCount(): number {
+    return this.bN;
+  }
+
   addHead(p: HeadPose): void {
     this.h.yaw += p.yaw;
     this.h.pitch += p.pitch;

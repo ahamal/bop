@@ -24,10 +24,82 @@ import {
   STATS_MS,
   type ArcadeSnapshot,
 } from "../minigames/director.ts";
+import { MICROGAMES, gameDurationMs, type Level } from "../minigames/registry.ts";
+import { CountdownRing } from "./CountdownRing.tsx";
 
-// Countdown ring geometry (the routine timer ring, arcade-sized).
-const RING_R = 26;
-const RING_C = 2 * Math.PI * RING_R;
+// --- Dev panel: playable-game checkboxes + starting/current level, persisted
+// across reloads. Checked ids feed the director's bag filter; the level jumps
+// the run (mid-run it applies from the next game).
+const DEV_KEY = "arcade-dev";
+
+interface DevConfig {
+  games: string[]; // enabled game ids
+  level: Level;
+}
+
+function loadDevConfig(): DevConfig {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DEV_KEY) ?? "");
+    const ids = new Set(MICROGAMES.map((d) => d.id));
+    const games = Array.isArray(raw.games) ? raw.games.filter((g: string) => ids.has(g)) : [];
+    const level = [1, 2, 3, 4, 5].includes(raw.level) ? (raw.level as Level) : 1;
+    return { games: games.length ? games : MICROGAMES.map((d) => d.id), level };
+  } catch {
+    return { games: MICROGAMES.map((d) => d.id), level: 1 };
+  }
+}
+
+function DevPanel({ dev, setDev }: { dev: DevConfig; setDev: (d: DevConfig) => void }) {
+  const [open, setOpen] = useState(false);
+  const toggle = (id: string) => {
+    const games = dev.games.includes(id)
+      ? dev.games.filter((g) => g !== id)
+      : [...dev.games, id];
+    setDev({ ...dev, games });
+  };
+  return (
+    <div className="fixed bottom-3 left-3 z-50 text-xs">
+      {open && (
+        <div className="mb-2 w-52 rounded-xl bg-panel p-3 shadow-lg ring-1 ring-black/10 dark:ring-white/10">
+          <p className="mb-1.5 font-semibold uppercase tracking-wider text-muted">Games</p>
+          {MICROGAMES.map((d) => (
+            <label key={d.id} className="flex cursor-pointer items-center gap-2 py-0.5 text-text">
+              <input
+                type="checkbox"
+                checked={dev.games.includes(d.id)}
+                onChange={() => toggle(d.id)}
+                className="accent-current"
+              />
+              {d.title}
+            </label>
+          ))}
+          <p className="mb-1.5 mt-3 font-semibold uppercase tracking-wider text-muted">Level</p>
+          <div className="flex gap-1">
+            {([1, 2, 3, 4, 5] as const).map((l) => (
+              <button
+                key={l}
+                onClick={() => setDev({ ...dev, level: l })}
+                className={`h-7 w-7 rounded-md font-semibold tabular-nums ring-1 ${
+                  dev.level === l
+                    ? "bg-accent text-white ring-accent"
+                    : "text-text ring-black/15 hover:bg-black/5 dark:ring-white/15 dark:hover:bg-white/5"
+                }`}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <button
+        onClick={() => setOpen(!open)}
+        className="rounded-full bg-panel px-3 py-1.5 font-medium text-muted shadow ring-1 ring-black/10 hover:text-text dark:ring-white/10"
+      >
+        {open ? "backstage ×" : "backstage"}
+      </button>
+    </div>
+  );
+}
 
 export function ArcadeScreen({ onExit }: { onExit: () => void }) {
   const [arc, setArc] = useState<ArcadeSnapshot | null>(null);
@@ -42,9 +114,22 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
 
   // The director lives exactly as long as the session. It is the frame sink;
   // React only hears its coarse snapshots.
+  // Dev panel state — which games the bag may draw and the starting/current
+  // level — persisted so a playtest setup survives reloads.
+  const [dev, setDev] = useState<DevConfig>(loadDevConfig);
+  const devRef = useRef(dev);
+  devRef.current = dev;
+  useEffect(() => {
+    localStorage.setItem(DEV_KEY, JSON.stringify(dev));
+    directorRef.current?.setEnabledGames(dev.games);
+    directorRef.current?.setLevel(dev.level);
+  }, [dev]);
+
   useEffect(() => {
     if (!session) return;
     const director = new ArcadeDirector(session, () => playfieldRef.current);
+    director.setEnabledGames(devRef.current.games);
+    director.setLevel(devRef.current.level);
     directorRef.current = director;
     const unsub = director.subscribe(setArc);
     return () => {
@@ -95,32 +180,11 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
             {phase === "playing" && arc && (
               <>
                 {/* Left corners: Dance's rhythm panel owns the right edge. */}
-                <div className="absolute left-3 top-3 h-14 w-14">
-                  <svg viewBox="0 0 64 64" className="h-full w-full -rotate-90">
-                    <circle
-                      cx="32"
-                      cy="32"
-                      r={RING_R}
-                      fill="none"
-                      strokeWidth="5"
-                      className="stroke-black/10 dark:stroke-white/10"
-                    />
-                    <circle
-                      cx="32"
-                      cy="32"
-                      r={RING_R}
-                      fill="none"
-                      strokeWidth="5"
-                      strokeLinecap="round"
-                      className={arc.timeLeft <= 3 ? "stroke-red-500" : "stroke-accent"}
-                      strokeDasharray={RING_C}
-                      strokeDashoffset={RING_C * (1 - (arc.timeLeft * 1000) / GAME_MS)}
-                      style={{ transition: "stroke-dashoffset 1s linear" }}
-                    />
-                  </svg>
-                  <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold tabular-nums text-text">
-                    {arc.timeLeft}
-                  </span>
+                <div className="absolute left-3 top-3">
+                  <CountdownRing
+                    timeLeft={arc.timeLeft}
+                    totalMs={(arc.def ? gameDurationMs(arc.def, arc.level) : 0) || GAME_MS}
+                  />
                 </div>
                 {arc.hud && (
                   <span className="absolute bottom-3 left-3 rounded-md bg-black/50 px-2.5 py-1 text-sm font-medium tabular-nums text-white">
@@ -253,6 +317,7 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
           {running && <Button onClick={() => session?.recenter()}>Recenter</Button>}
         </>
       )}
+      <DevPanel dev={dev} setDev={setDev} />
     </SessionShell>
   );
 }

@@ -12,6 +12,8 @@ import type { FrameResult, TrackingSession } from "../tracking/session.ts";
 import { chompDef } from "./chomp/chomp.ts";
 import { danceDef } from "./dance/dance.ts";
 import { droneDef } from "./drone/drone.ts";
+import { mimicDef } from "./mimic/mimic.ts";
+import { redLightDef } from "./redlight/redlight.ts";
 import { taxiDef } from "./taxi/taxi.ts";
 
 export type Level = 1 | 2 | 3 | 4 | 5;
@@ -39,9 +41,26 @@ export interface MicrogameDef {
   hint: string;
   /** Survival games win when the clock runs out; omit/false = timeout is a loss. */
   timeoutWins?: boolean;
+  /** This game's clock, if it needs more than the standard GAME_MS — a
+   * number, or a function of level (harder levels can buy more time). */
+  durationMs?: number | ((level: Level) => number);
   create(canvas: HTMLCanvasElement, session: TrackingSession, level: Level): Microgame;
+}
+
+/** A def's clock at a level, in ms (0 = use the harness default GAME_MS —
+ * kept out of here to avoid a registry↔director import cycle). */
+export function gameDurationMs(def: MicrogameDef, level: Level): number {
+  const d = def.durationMs;
+  return (typeof d === "function" ? d(level) : d) ?? 0;
 }
 
 // The lineup — grows toward the 12 in the plan; Chomp ("Eat") is the exemplar
 // that proves the round loop end to end.
-export const MICROGAMES: readonly MicrogameDef[] = [chompDef, danceDef, taxiDef, droneDef];
+export const MICROGAMES: readonly MicrogameDef[] = [
+  chompDef,
+  danceDef,
+  taxiDef,
+  droneDef,
+  redLightDef,
+  mimicDef,
+];

@@ -174,7 +174,9 @@ export function PlayScreen({ onExit }: { onExit: () => void }) {
     // request — recentering twice is harmless.)
     if (snap.requestRecenter) {
       recenterPending.current = true;
-      session?.recenter();
+      // Settle mode: the relax card wants a genuinely still head behind the
+      // new neutral (buttons use the default instant mode instead).
+      session?.recenter("settle");
     }
 
     // Ring: quantize to ticks so it steps around like a clock, not a smooth fill.
