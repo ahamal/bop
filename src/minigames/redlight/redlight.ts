@@ -541,7 +541,6 @@ class RedLightGame implements Microgame {
 export const redLightDef: MicrogameDef = {
   id: "redlight",
   title: "Green Light, Red Light",
-  headline: "Killer doll wins daytime TV, again",
   prompt: { lead: "move to", action: "RUN" },
   hint: "move your head or body to run · freeze when the doll turns red",
   durationMs: DURATION_MS,

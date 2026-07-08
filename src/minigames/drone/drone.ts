@@ -26,6 +26,14 @@ const ROLL_RANGE_DEG = 12;
 const ROLL_SMOOTH_MS = 130;
 const TURN_RATE = 0.0018; // rad/ms at full bank
 
+// Pitch throttle: chin DOWN speeds the run up, chin UP eases it off — the
+// dragon game's idea, but gentle (that one runs to ×2 dive; here chin-down
+// tops out at ×1.4 and chin-up at ×0.7, so it's a trim, not a lurch).
+const PITCH_RANGE_DEG = 10; // head tilt for full throttle either way
+const PITCH_SMOOTH_MS = 110;
+const DIVE_GAIN = 0.4; // chin down → up to ×1.4 speed
+const BRAKE_GAIN = 0.3; // chin up → down to ×0.7 speed
+
 // Mouth: open past DROP to release, close under REARM before the next one.
 const MOUTH_DROP = 0.35;
 const MOUTH_REARM = 0.18;
@@ -89,11 +97,13 @@ const FLAG_RISE_MS = 450;
 // then flips. (The director cuts to the result card the frame the outcome
 // changes, so reporting immediately would cut the scene off.)
 const WIN_OUTRO_MS = 1800;
-// This game's clock, per level (declared as durationMs on the def — a
-// bigger quota needs a longer run than the standard 10s, and the higher
-// levels' quotas buy proportionally more time); the outro must resolve
-// before it or a hit in the final second would time out as a loss.
-const CLOCK_MS = [12_000, 13_500, 15_000, 16_500, 18_000];
+// This game's clock (declared as durationMs on the def): a base run plus a
+// fixed slice of time for every tank the level's quota demands, so a bigger
+// quota buys proportionally more time. The win outro must resolve before it
+// or a hit in the final second would time out as a loss.
+const CLOCK_BASE_MS = 11_000;
+const CLOCK_PER_TANK_MS = 3_500;
+const clockMs = (level: Level): number => CLOCK_BASE_MS + CLOCK_PER_TANK_MS * QUOTA[level - 1];
 const OUTRO_MARGIN_MS = 250;
 
 class DroneMicrogame implements Microgame {
@@ -105,6 +115,7 @@ class DroneMicrogame implements Microgame {
   private z = 0;
   private heading = 0; // 0 = -z; positive = screen-left turn
   private rollNorm = 0; // smoothed roll input, -1..1
+  private pitchNorm = 0; // smoothed throttle input, -1..1 (chin down = +)
   private mouth = 0;
   // Starts UNARMED: the mouth must be seen closed once before the first drop,
   // so a mouth already open at the whistle (talking, mid-"open wide" from the
@@ -324,7 +335,7 @@ class DroneMicrogame implements Microgame {
     // timeout loss on a game that was actually won.
     if (this.winIn >= 0 && this._outcome === "pending") {
       this.winIn -= dt;
-      const clockLeft = CLOCK_MS[this.level - 1] - this.elapsed - OUTRO_MARGIN_MS;
+      const clockLeft = clockMs(this.level) - this.elapsed - OUTRO_MARGIN_MS;
       if (this.winIn <= 0 || clockLeft <= 0) this._outcome = "win";
     }
 
@@ -334,21 +345,34 @@ class DroneMicrogame implements Microgame {
     const k = 1 - Math.exp(-dt / ROLL_SMOOTH_MS);
     const rollT = Math.max(-1, Math.min(1, f.metrics.headRoll / ROLL_RANGE_DEG));
     this.rollNorm += (rollT - this.rollNorm) * k;
+    // Sign matches the dragon (Keep): headPitch reads positive on chin-UP in
+    // practice (despite the "chin-down positive" doc), so negate it. Then
+    // pitchNorm > 0 = head FORWARD (chin down) = faster AND nose down (dive);
+    // pitchNorm < 0 = head BACK = slower AND nose up. Speed and the nose-tilt
+    // visual share this one sign, so they always agree.
+    const kp = 1 - Math.exp(-dt / PITCH_SMOOTH_MS);
+    const pitchT = Math.max(-1, Math.min(1, -f.metrics.headPitch / PITCH_RANGE_DEG));
+    this.pitchNorm += (pitchT - this.pitchNorm) * kp;
     if (f.expression) {
       const km = 1 - Math.exp(-dt / MOUTH_SMOOTH_MS);
       this.mouth += (f.expression.mouthOpen - this.mouth) * km;
     }
 
-    // Fly: constant forward speed along the heading.
+    // Fly: forward along the heading, at a speed the pitch throttle trims —
+    // chin down runs to ×1.4, chin up eases to ×0.7.
     this.heading += this.rollNorm * TURN_RATE * dt;
     const dx = -Math.sin(this.heading);
     const dz = -Math.cos(this.heading);
-    const v = SPEED[lv];
+    const throttle = 1 + this.pitchNorm * (this.pitchNorm > 0 ? DIVE_GAIN : BRAKE_GAIN);
+    const v = SPEED[lv] * throttle;
     this.x += dx * v * dt;
     this.z += dz * v * dt;
     // Bank sign: from the chase cam (looking down -z with the craft),
-    // positive rotation.z dips the left wing — matching a left turn.
-    this.avatar.setCraft(this.x, this.z, this.heading, this.rollNorm);
+    // positive rotation.z dips the left wing — matching a left turn. The
+    // throttle also tips the nose (down when diving) for a sense of speed.
+    // Nose tilt uses the opposite sign from the throttle: head back tips the
+    // craft back (nose up), head forward tips it down — while speed stays as is.
+    this.avatar.setCraft(this.x, this.z, this.heading, this.rollNorm, -this.pitchNorm);
 
     // The reticle leads by exactly the payload's inherited travel.
     const lead = v * FALL_MS;
@@ -489,10 +513,9 @@ class DroneMicrogame implements Microgame {
 export const droneDef: MicrogameDef = {
   id: "drone",
   title: "Special Delivery",
-  headline: "Ceasefire holding, says drone fleet",
   prompt: { lead: "steer in and", action: "DROP" },
-  hint: "tilt to steer · open mouth to drop bombs",
-  durationMs: (level) => CLOCK_MS[level - 1],
+  hint: "tilt to steer · chin down to speed up, up to slow · open your mouth to drop a bomb on a tank",
+  durationMs: (level) => clockMs(level),
   create(canvas, session, level) {
     const avatar = session.attachAvatar(canvas, DroneAvatar);
     return new DroneMicrogame(avatar, session, level);

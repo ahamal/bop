@@ -29,6 +29,7 @@ const HANG_Y = -0.45; // figure origin below the craft's center
 
 const BANK_MAX = 0.45; // full-tilt bank into the turn (radians)
 const NOSE_TIP = 0.1; // constant nose-down cruise attitude
+const PITCH_TIP = 0.28; // extra nose dip/lift from the throttle (radians)
 const ROTOR_RAD_PER_MS = 0.05;
 
 // Chase camera: behind and above the craft, looking a touch ahead and down.
@@ -126,9 +127,10 @@ export class DroneAvatar extends AbstractAvatar {
    * heading 0 = -z, positive turns left (screen-left); roll01 is the bank
    * input, -1..1, tipping the craft into the turn.
    */
-  setCraft(x: number, z: number, heading: number, roll01: number): void {
+  setCraft(x: number, z: number, heading: number, roll01: number, pitch01 = 0): void {
     this.craftGroup.position.set(x, FLY_Y, z);
-    this.craftGroup.rotation.set(NOSE_TIP, heading, roll01 * BANK_MAX);
+    // Chin down (pitch01 > 0) dips the nose further for a diving-in feel.
+    this.craftGroup.rotation.set(NOSE_TIP + pitch01 * PITCH_TIP, heading, roll01 * BANK_MAX);
     const dx = -Math.sin(heading);
     const dz = -Math.cos(heading);
     this.camera.position.set(x - dx * CAM_BACK, FLY_Y + CAM_UP, z - dz * CAM_BACK);

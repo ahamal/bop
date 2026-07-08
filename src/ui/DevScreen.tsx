@@ -67,9 +67,8 @@ export function DevScreen() {
       },
       onFrame: (f) => render(f),
     });
-    // Same mesh as the play screen — mouth-open and eye-closed states come with
-    // it — plus the dev page's sunglasses.
-    session.attachAvatar(avatarCanvas, AbstractAvatar).setSunglasses(true);
+    // Same mesh as the play screen — mouth-open and eye-closed states come with it.
+    session.attachAvatar(avatarCanvas, AbstractAvatar);
 
     function render(f: FrameResult): void {
       // Match the overlay to the camera resolution once it's known (first frame).

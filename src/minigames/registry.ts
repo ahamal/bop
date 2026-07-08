@@ -1,6 +1,6 @@
 // The microgame registry (docs/arcade-plan.md). Every arcade game is a
-// MicrogameDef: static chrome for the cutscene cards (title, prompt, headline,
-// hint) plus a factory that builds the running game. Games attach their own
+// MicrogameDef: static chrome for the cutscene cards (title, prompt, hint)
+// plus a factory that builds the running game. Games attach their own
 // Avatar subclass to the shared playfield canvas via the session (the pattern
 // proven by ChompAvatar) and consume the frame stream through update() — the
 // ArcadeDirector calls it every frame; nothing per-frame touches React.
@@ -34,8 +34,6 @@ export interface Microgame {
 export interface MicrogameDef {
   id: string;
   title: string;
-  /** Fake-2026-headline flavor line on the prompt card. */
-  headline: string;
   /** Two-tier prompt: small lead-in + huge action word ("tilt to" / "BALANCE"). */
   prompt: { lead: string; action: string };
   /** Control hint, one short line ("lean to slide · open wide to chomp"). */

@@ -231,7 +231,9 @@ class ChompMicrogame implements Microgame {
       for (let k = 0; k < 4; k++) {
         const a = (k * Math.PI) / 2 + 0.4;
         const l = new THREE.Mesh(berryLeaf, green);
-        l.position.set(Math.cos(a) * 0.09, 0.16, Math.sin(a) * 0.09);
+        // Splayed out onto the crown (the body is ~0.12 wide up here, so a
+        // tighter radius buried them) and lifted to sit on top, not inside.
+        l.position.set(Math.cos(a) * 0.13, 0.2, Math.sin(a) * 0.13);
         l.rotation.set(Math.sin(a) * 1.1, 0, -Math.cos(a) * 1.1);
         g.add(l);
       }
@@ -409,7 +411,6 @@ class ChompMicrogame implements Microgame {
 export const chompDef: MicrogameDef = {
   id: "chomp",
   title: "All You Can Eat",
-  headline: "Lab-grown burger now cheaper than beef",
   prompt: { lead: "open wide and", action: "EAT" },
   hint: "lean to slide · chomp the fruit · don't eat the junk",
   create(canvas, session, level) {

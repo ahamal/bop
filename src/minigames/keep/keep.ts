@@ -945,9 +945,8 @@ class KeepGame implements Microgame {
 export const keepDef: MicrogameDef = {
   id: "keep",
   title: "Final Boss: The Keep",
-  headline: "Rewilded dragons torch record number of castles",
-  prompt: { lead: "feast, then", action: "TORCH" },
-  hint: "tilt or lean to steer · look down to dive, up to brake · hold mouth open to fire",
+  prompt: { lead: "collect, then", action: "SHOOT" },
+  hint: "tilt to steer · fly through embers to collect them · open your mouth to shoot a fireball · turn to dodge the boulders",
   durationMs: bossClockMs,
   create(canvas, session, level) {
     const avatar = session.attachAvatar(canvas, DragonAvatar);

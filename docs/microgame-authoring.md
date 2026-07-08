@@ -32,8 +32,7 @@ usually `avatar.ts` (its avatar subclass), exporting one `MicrogameDef`:
 ```ts
 export const fooDef: MicrogameDef = {
   id: "foo",                       // stable slug; also the practice-page key
-  title: "Punchy Name",            // 2–4 words, jokes welcome (see §8)
-  headline: "Fake 2026 headline",  // satirical news line on the prompt card
+  title: "Punchy Name",            // 2–4 words, jokes welcome (see §8); shown on the prompt card
   prompt: { lead: "small words", action: "VERB" },  // "shake to" / "RUN"
   hint: "one line · with · separators",             // shown on prompt + practice
   timeoutWins: true,               // ONLY for survival games; omit otherwise
@@ -286,13 +285,13 @@ edge; redlight's pill sits top-center).
 
 ## 8. Tone
 
-Titles and headlines are deadpan 2026 satire; the joke and the mechanic
-should be the same thing (the doll turning IS red light; "assertive mode"
-robotaxis ARE the dodge). Existing set: "All You Can Eat" / lab-grown
-burgers, "Jaywalker" / assertive robotaxis, "Special Delivery" / ceasefire
-drones, "Fake It Till You Make It" / hologram idols, "Green Light, Red
-Light" / killer doll on daytime TV. Two-tier prompt: tiny lead-in, huge
-verb. Hint: one line, `·`-separated clauses, lowercase.
+Titles are deadpan 2026 satire; the joke and the mechanic should be the same
+thing (the doll turning IS red light; "assertive mode" robotaxis ARE the
+dodge). Existing set: "All You Can Eat", "Jaywalker", "Special Delivery",
+"Fake It Till You Make It", "Green Light, Red Light", "Prove You're Human".
+Two-tier prompt: tiny lead-in, huge verb. Hint: one line, `·`-separated
+clauses, lowercase. (The prompt card shows the title, not a news headline —
+the old fake-headline line was dropped.)
 
 
 ## 9. Movement channels (pick the under-served one)

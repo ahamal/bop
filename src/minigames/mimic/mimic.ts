@@ -28,9 +28,10 @@
 // flashes it red and stays on it, the second fails the test. Tuck onsets
 // are outside the vocabulary and ignored.
 //
-// Clock math (durationMs = 26s): deal ~1.1s + study 5.7s + ready 0.8s +
-// flip cascade + 6 moves at a leisurely ~2.8s each ≈ 25s — the last card
-// resolves inside the clock even at level 5; faster recall wins sooner.
+// Clock math (durationMs = 28s): deal ~1.1s + study 5.7s + 3·2·1·ready
+// countdown ~2.6s + flip cascade + 6 moves at a leisurely ~2.8s each ≈ 27s —
+// the last card resolves inside the clock even at level 5; faster recall
+// wins sooner.
 
 import * as THREE from "three";
 import type { FrameResult, TrackingSession } from "../../tracking/session.ts";
@@ -70,12 +71,17 @@ const COUNT = [2, 3, 4, 5, 6];
 // after the deal — one card gets ~2.5s, the full five ~5.1s.
 const REVEAL_BASE_MS = 1800;
 const REVEAL_PER_CARD_MS = 650;
-const READY_MS = 800; // the "READY?" flash between study time and the test
+// The countdown between study time and the test: "3 · 2 · 1 · ready", one
+// label per step (cards still up, so it's also the last-chance warning), then
+// the cards flip and the test begins.
+const COUNTDOWN_STEPS = ["3", "2", "1", "ready"] as const;
+const COUNTDOWN_STEP_MS = 650;
+const READY_MS = COUNTDOWN_STEPS.length * COUNTDOWN_STEP_MS;
 // The deal: cards slide in from off the table's right edge, one per beat.
 const DEAL_STAGGER_MS = 100;
 const DEAL_SETTLE_MS = 500; // last card's slide comfortably lands in this
 const DEAL_EASE_MS = 150;
-const DURATION_MS = 26_000; // this game's clock (declared on the def)
+const DURATION_MS = 28_000; // this game's clock (declared on the def)
 // Input grace: ignored windows right after the flip-down and after every
 // hit, so the return-to-center overshoot can't judge as the next move.
 const GRACE_MS = 400;
@@ -140,8 +146,9 @@ class MimicGame implements Microgame {
   private mistakes = 0; // wrong tries on the CURRENT card; resets on advance
   private warnUntil = NaN; // the warning flash on the current card ends here
   private phase: "reveal" | "ready" | "recall" = "reveal";
-  private revealEndsAt = 0; // deal + study time; the READY flash starts here
-  private readyUntil = 0; // the flash ends and the test begins here
+  private revealEndsAt = 0; // deal + study time; the countdown starts here
+  private readyUntil = 0; // the countdown ends and the test begins here
+  private readyStep = -1; // which countdown label is showing (index into COUNTDOWN_STEPS)
   private graceUntil = 0;
 
   private mouth = 0;
@@ -322,19 +329,26 @@ class MimicGame implements Microgame {
 
     this.animate(dt);
 
-    // --- Reveal phase: study time ends with a READY flash…
+    // --- Reveal phase: study time ends with a 3·2·1·ready countdown…
     if (this.phase === "reveal") {
       if (this.t >= this.revealEndsAt) {
         this.phase = "ready";
         this.readyUntil = this.t + READY_MS;
-        this.banner.textContent = "ready?";
-        this.banner.style.fontSize = "15px";
-        playTick(false);
+        this.readyStep = -1;
+        this.banner.style.fontSize = "17px";
       }
       return;
     }
-    // --- …then the cards flip down and the test begins.
+    // --- …the countdown ticks off its labels one per step…
     if (this.phase === "ready") {
+      const elapsed = this.t - (this.readyUntil - READY_MS);
+      const step = Math.min(COUNTDOWN_STEPS.length - 1, Math.floor(elapsed / COUNTDOWN_STEP_MS));
+      if (step !== this.readyStep) {
+        this.readyStep = step;
+        this.banner.textContent = COUNTDOWN_STEPS[step];
+        playTick(step === COUNTDOWN_STEPS.length - 1); // brighter tick on "ready"
+      }
+      // …then the cards flip down and the test begins.
       if (this.t >= this.readyUntil) {
         this.phase = "recall";
         // A wave, not a slam: each card's flip fires a beat after the last.
@@ -442,7 +456,6 @@ class MimicGame implements Microgame {
 export const mimicDef: MicrogameDef = {
   id: "mimic",
   title: "Prove You're Human",
-  headline: "CAPTCHA v9 now requires interpretive dance",
   prompt: { lead: "memorize, then", action: "MIMIC" },
   hint: "study the cards · then do the moves in order",
   durationMs: DURATION_MS,

@@ -33,14 +33,17 @@ import { DanceAvatar } from "./avatar.ts";
 
 type DanceMove = "lookLeft" | "lookRight" | "tiltLeft" | "tiltRight" | "center";
 
-// Per-level tempo, indexed by level-1. Difficulty = faster beat, more drops
-// (levels 4-5 drop every 3rd beat instead of 4th), tilts joining at level 2.
-const BPM = [104, 112, 120, 132, 144];
-const DROP_EVERY = [4, 4, 4, 3, 3];
+// Per-level tempo, indexed by level-1 (the run samples tiers 1/3/5). Higher
+// levels beat faster, DROP a move on more of the beats (every 2nd by the top
+// tier, not every 4th), and — the key pressure — the chips FALL faster
+// (shorter LEAD), so there's less time to read each move as it comes in.
+const BPM = [112, 126, 140, 150, 150];
+const DROP_EVERY = [4, 4, 3, 3, 3];
+const LEAD_MS = [1700, 1550, 1400, 1300, 1300]; // chip fall time, tightens per level
 
 const FIRST_HIT_MS = 2200; // first chip reaches the hit slot here
-const LAST_HIT_MS = 8900; // last one well inside the director's 10s clock
-const LEAD_MS = 1800; // chip fall time from the panel top to the hit slot
+const LAST_HIT_MS = 13_500; // last one, inside this game's (longer) clock
+const CLOCK_MS = 15_000; // the run is longer than the standard 10s
 const JUDGE_MS = 350; // ± window around the beat that counts as on-time
 // "Back to center" tolerance (degrees from neutral) on the axes the moves
 // use. Inside the look/tilt enter thresholds, so a centered head can't also
@@ -127,7 +130,7 @@ class DanceGame implements Microgame {
   constructor(
     private avatar: DanceAvatar,
     private session: TrackingSession,
-    level: Level,
+    private level: Level,
     host: HTMLElement,
   ) {
     this.beatMs = 60_000 / BPM[level - 1];
@@ -185,10 +188,10 @@ class DanceGame implements Microgame {
     // Same nose as the player figure (abstractParts.ts), at dancer scale: a
     // slim triangular prism whose forward vertex forms the ridge — narrower
     // at the bridge, wider at the nostrils.
-    // Longer and prouder than strict player scale — on these small heads the
-    // nose is the only yaw cue, so it has to break the silhouette when they
-    // look left/right.
-    const noseGeo = geo(new THREE.CylinderGeometry(0.04, 0.078, 0.24, 3));
+    // Enough to break the silhouette on a look left/right (the small heads'
+    // only yaw cue) without reading as a beak now that the player's nose is
+    // small too.
+    const noseGeo = geo(new THREE.CylinderGeometry(0.04, 0.078, 0.16, 3));
     const hairGeo = geo(new THREE.SphereGeometry(0.36, 7, 5));
     const tailGeo = geo(new THREE.SphereGeometry(0.12, 6, 4));
     // Shades: two round lens discs, a bridge, and arms running back to the
@@ -378,9 +381,10 @@ class DanceGame implements Microgame {
 
     // Chips: spawn LEAD_MS out, ride the panel down (px mapped from time so
     // arrival at the slot IS the beat), judge inside the window.
+    const lead = LEAD_MS[this.level - 1];
     const panelH = this.panel.clientHeight || 1;
     const hitPx = panelH * HIT_FRAC;
-    const pxPerMs = (hitPx + 70) / LEAD_MS; // spawn ~70px above the panel top
+    const pxPerMs = (hitPx + 70) / lead; // spawn ~70px above the panel top
     for (const tok of this.tokens) {
       const dueIn = tok.beatAt - this.t;
       if (tok.state === "hit") {
@@ -396,7 +400,7 @@ class DanceGame implements Microgame {
         }
         continue;
       }
-      if (tok.state === "pending" && !tok.el && dueIn <= LEAD_MS) {
+      if (tok.state === "pending" && !tok.el && dueIn <= lead) {
         tok.el = this.makeChip(tok.move);
         this.panel.appendChild(tok.el);
       }
@@ -506,9 +510,9 @@ function makeTiltIcon(side: -1 | 1, color: string): HTMLElement {
 export const danceDef: MicrogameDef = {
   id: "dance",
   title: "Fake It Till You Make It",
-  headline: "Hologram idol group tops the charts",
   prompt: { lead: "copy the", action: "DANCE" },
   hint: "do the falling move when it reaches the slot · ◎ = back to center",
+  durationMs: CLOCK_MS,
   create(canvas, session, level) {
     const avatar = session.attachAvatar(canvas, DanceAvatar);
     // The playfield div (the canvas's positioned parent) hosts the 2D panel.

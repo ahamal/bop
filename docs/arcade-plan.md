@@ -11,25 +11,27 @@ survived → end screen.
 
 ## Run structure
 
-- **Round** = 8 microgames drawn from a shuffled bag (no repeats until the
-  bag of 12 empties, then reshuffle).
-- After 8 games → **level +1** (1→3), shown ticking up in the cutscene.
+- **Round** = one shuffled pass through every enabled microgame — each plays
+  exactly once, in a fresh random order per level (no fixed count; the round
+  length is just the size of the game list, currently 6).
+- After the round → **level +1** (1→3), shown ticking up in the cutscene.
   The run is three levels, but each samples a spread-out tier of the games'
   5-step difficulty curves — level 1→tier 1, level 2→tier 3, level 3→tier 5
   (`DIFFICULTY_STEP` in director.ts) — so every round is a real jump and the
   hardest level-5 twists still appear. The games keep their 5 tiers.
 - **Lives**: start 4; fail a game → −1; 0 → game over + score screen.
-- **Boss slot** (BUILT): after game 8 of every round, a final boss plays
-  instead of a bag draw — it GATES the level. A loss costs a life and
-  replays the SAME fight; a win opens the next level, and beating the
-  level-3 boss is the run's win screen. Bosses are not in the bag; they
-  appear in the practice picker, get a red action word on the prompt card,
-  and a diamond pip after the 8 dots on the stats card. Several boss
+- **Boss slot** (BUILT): after the round's games, a final boss plays instead
+  of a bag draw — it GATES the level. A loss costs a life and replays the
+  SAME fight; a win opens the next level, and beating the level-3 boss is the
+  run's win screen. Bosses are not in the bag; they appear in the practice
+  picker, get a red action word on the prompt card, and a diamond pip after
+  the game dots on the stats card. Several boss
   candidates are being tried (`BOSSES` in the registry — currently The
   Keep; The Algorithm was cut, its dodge/tuck stack too flaky seated): the
   director draws one per round,
   varying across rounds, and the dev panel can pin the pool to one candidate.
-- **Score** = games cleared (bosses count). Full run = 3×(8+1) = 27 plays.
+- **Score** = games cleared (bosses count). Full run = 3×(games+1); with the
+  current 6 games that's 3×7 = 21 plays.
 - Catalog math: 12 games × 5 tiers = 60 variants (the run visits 3 of the 5).
   "150" needs 30 games — later target, spares list below.
 - OPEN QUESTION: end after round 3 (recommended, winnable session) vs
@@ -40,9 +42,9 @@ survived → end screen.
 1. **Stats card** (~1.2s): `LEVEL 2 · ROUND 2/3 · ♥♥♥`. The changed stat
    animates (level digit rolls up, lost heart pops/greys). Flash in fast,
    hold, flash out.
-2. **Prompt card** (~1.2s): two-tier type — lead-in small, action word huge
-   ("tilt to" / **BALANCE**), plus a tiny fake-2026-headline flavor line and
-   a control hint.
+2. **Prompt card** (~1.2s): the game title on top, then two-tier type —
+   lead-in small, action word huge ("tilt to" / **BALANCE**), then a control
+   hint. (The old fake-2026-headline flavor line was dropped.)
 3. Game fades in with a 10s countdown ring (reuse the routine ring), result
    stinger (win chime / life-lost thud + music duck), game fades out.
 
@@ -53,7 +55,6 @@ survived → end screen.
 export interface MicrogameDef {
   id: string;
   title: string;
-  headline: string;                         // 2026-news flavor line
   prompt: { lead: string; action: string }; // "tilt to" + "BALANCE"
   hint: string;                             // "roll your head to keep the tray level"
   create(canvas: HTMLCanvasElement, session: TrackingSession, level: 1|2|3|4|5): Microgame;
