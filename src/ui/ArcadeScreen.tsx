@@ -16,7 +16,6 @@ import { arcadeMusicPlayer } from "../audio/player.ts";
 import {
   ArcadeDirector,
   GAME_MS,
-  GAMES_PER_ROUND,
   MAX_LEVEL,
   PROMPT_MS,
   RESULT_MS,
@@ -141,6 +140,16 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
     };
   }, [session]);
 
+  // Dev shortcut: Enter instantly completes the current level (jump to the
+  // next, or the win screen at the cap).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Enter") directorRef.current?.devCompleteLevel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const phase = arc?.phase ?? "nod-wait";
   const nodWait = phase === "nod-wait";
   const level = arc?.level ?? 1;
@@ -159,7 +168,7 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
       {nodWait ? (
         <SessionLobby
           title="Minigame Arcade"
-          subtitle={`${MAX_LEVEL} rounds · ${GAMES_PER_ROUND} games + a boss · ${START_LIVES} lives`}
+          subtitle={`${MAX_LEVEL} rounds · ${MICROGAMES.length} games + a boss · ${START_LIVES} lives`}
           screen={screen}
           onStart={() => directorRef.current?.startRun()}
           onExit={onExit}
@@ -182,10 +191,13 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
             {phase === "playing" && arc && (
               <>
                 {/* Left corners: Dance's rhythm panel owns the right edge. */}
+                {/* Game scenes are bright and busy — use practice's frosted,
+                    white, backed ring so the clock stays legible on any of them. */}
                 <div className="absolute left-3 top-3">
                   <CountdownRing
                     timeLeft={arc.timeLeft}
                     totalMs={(arc.def ? gameDurationMs(arc.def, arc.level) : 0) || GAME_MS}
+                    variant="practice"
                   />
                 </div>
                 {arc.hud && (
@@ -242,9 +254,9 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
                       the boss diamond waiting at the level door. */}
                   <div
                     className="flex items-center gap-1.5"
-                    aria-label={arc.boss ? "Boss fight" : `Game ${arc.gameNum} of ${GAMES_PER_ROUND}`}
+                    aria-label={arc.boss ? "Boss fight" : `Game ${arc.gameNum} of ${arc.gamesPerRound}`}
                   >
-                    {Array.from({ length: GAMES_PER_ROUND }, (_, i) => (
+                    {Array.from({ length: arc.gamesPerRound }, (_, i) => (
                       <span
                         key={i}
                         className={`h-1.5 w-1.5 rounded-full ${
@@ -272,20 +284,24 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
               <div className="absolute inset-0 flex items-center justify-center">
                 <div
                   style={{ animation: `arcade-card ${PROMPT_MS}ms ease both` }}
-                  className="flex w-4/5 max-w-sm flex-col items-center gap-2 rounded-2xl bg-panel px-8 py-6 text-center shadow-lg ring-1 ring-black/5 dark:ring-white/10"
+                  className="flex w-4/5 max-w-sm flex-col items-center gap-1 rounded-2xl bg-panel px-8 py-7 text-center shadow-lg ring-1 ring-black/5 dark:ring-white/10"
                 >
-                  <p className="text-[0.65rem] font-medium uppercase tracking-widest text-muted">
-                    2026 · {def.headline}
-                  </p>
-                  <p className="mt-2 text-lg text-muted">{def.prompt.lead}</p>
                   <p
-                    className={`text-6xl font-black tracking-tight ${
+                    className={`text-xs font-semibold uppercase tracking-[0.2em] ${
+                      arc?.boss ? "text-red-500" : "text-muted"
+                    }`}
+                  >
+                    {def.title}
+                  </p>
+                  <p className="mt-4 text-lg text-muted">{def.prompt.lead}</p>
+                  <p
+                    className={`text-6xl font-black leading-none tracking-tight ${
                       arc?.boss ? "text-red-500" : "text-text"
                     }`}
                   >
                     {def.prompt.action}
                   </p>
-                  <p className="mt-2 text-sm text-muted">{def.hint}</p>
+                  <p className="mt-4 text-sm leading-snug text-muted">{def.hint}</p>
                 </div>
               </div>
             )}
@@ -314,16 +330,15 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
                   {phase === "win" ? "YOU WIN!" : "GAME OVER"}
                 </p>
                 <p className="text-sm tabular-nums text-muted">
-                  score {arc.score} / {MAX_LEVEL * (GAMES_PER_ROUND + 1)}
+                  score {arc.score} / {MAX_LEVEL * (arc.gamesPerRound + 1)}
                 </p>
                 <p className="text-sm text-muted">Nod to play again</p>
-                <Button
-                  variant="primary"
-                  onClick={() => directorRef.current?.startRun()}
-                  className="mt-1"
-                >
-                  Play again
-                </Button>
+                <div className="mt-1 flex gap-2">
+                  <Button variant="primary" onClick={() => directorRef.current?.startRun()}>
+                    Play again
+                  </Button>
+                  <Button onClick={onExit}>Home</Button>
+                </div>
               </div>
             )}
           </div>

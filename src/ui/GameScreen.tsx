@@ -45,7 +45,7 @@ export function GameScreen({
       {/* Pull the hook up under the tagline — one intro block, not two floating lines. */}
       <p className="-mt-4 max-w-md text-center text-muted">
         Stop the silent pandemic of{" "}
-        <a href="#science" className="underline underline-offset-2 transition hover:text-text">
+        <a href="#science" className="text-accent transition hover:opacity-80">
           tech neck
         </a>
         .
@@ -79,8 +79,13 @@ export function GameScreen({
           ["about", "About"],
           ["science", "Science"],
           ["credits", "Credits"],
-          ["tracker", "Tracker"],
-          ["practice", "Practice"],
+          // Dev-only diagnostics — hidden from the production build.
+          ...(import.meta.env.DEV
+            ? ([
+                ["tracker", "Tracker"],
+                ["practice", "Practice"],
+              ] as const)
+            : []),
         ].map(([hash, label]) => (
           <a key={hash} href={`#${hash}`} className="transition hover:text-text">
             {label}

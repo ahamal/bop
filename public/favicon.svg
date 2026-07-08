@@ -1,0 +1,11 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- bop — brand mark: an abstract head over a V-tapered torso (wide shoulders
+       narrowing down, matching the model's torso), the head tilted into the
+       signature neck stretch. Emerald tile so it reads on light + dark tabs. -->
+  <rect width="64" height="64" rx="15" fill="#34d399"/>
+  <!-- torso: faceted V — wide shoulders tapering to a narrow base -->
+  <polygon points="15,41 49,41 46,54 42,58 22,58 18,54" fill="#f8fafc"/>
+  <!-- head: a slightly taller oval, tilted off-axis into the stretch -->
+  <ellipse cx="32" cy="24" rx="11" ry="12.5" fill="#f8fafc"
+           transform="rotate(24 32 37)"/>
+</svg>
