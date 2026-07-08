@@ -44,7 +44,7 @@ function loadDevConfig(): DevConfig {
     const raw = JSON.parse(localStorage.getItem(DEV_KEY) ?? "");
     const ids = new Set(ALL_GAMES.map((d) => d.id));
     const games = Array.isArray(raw.games) ? raw.games.filter((g: string) => ids.has(g)) : [];
-    const level = [1, 2, 3, 4, 5].includes(raw.level) ? (raw.level as Level) : 1;
+    const level = [1, 2, 3].includes(raw.level) ? (raw.level as Level) : 1;
     return { games: games.length ? games : ALL_GAMES.map((d) => d.id), level };
   } catch {
     return { games: ALL_GAMES.map((d) => d.id), level: 1 };
@@ -77,7 +77,7 @@ function DevPanel({ dev, setDev }: { dev: DevConfig; setDev: (d: DevConfig) => v
           ))}
           <p className="mb-1.5 mt-3 font-semibold uppercase tracking-wider text-muted">Level</p>
           <div className="flex gap-1">
-            {([1, 2, 3, 4, 5] as const).map((l) => (
+            {([1, 2, 3] as const).map((l) => (
               <button
                 key={l}
                 onClick={() => setDev({ ...dev, level: l })}

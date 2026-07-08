@@ -35,7 +35,14 @@ export const RESULT_MS = 1000;
 export const GAME_MS = 10_000;
 
 export const GAMES_PER_ROUND = 8;
-export const MAX_LEVEL = 5;
+// The run is three levels (displayed 1→2→3), but each pulls its difficulty
+// from a spread-out tier of the games' 5-step curves — so every round is a
+// real jump (and the games' hardest level-5 twists still show up) instead of
+// five near-identical rounds. The games themselves are unchanged.
+export const MAX_LEVEL = 3;
+const DIFFICULTY_STEP: readonly Level[] = [1, 3, 5];
+/** The difficulty tier a displayed level plays at (1→1, 2→3, 3→5). */
+const difficultyFor = (level: Level): Level => DIFFICULTY_STEP[level - 1] ?? level;
 export const START_LIVES = 4;
 
 type ArcadePhase =
@@ -240,8 +247,9 @@ export class ArcadeDirector {
   private beginGame(): void {
     const canvas = this.canvas();
     if (!canvas || !this.def) return;
-    this.game = this.def.create(canvas, this.session, this.level);
-    this.timerMs = gameDurationMs(this.def, this.level) || GAME_MS;
+    const difficulty = difficultyFor(this.level);
+    this.game = this.def.create(canvas, this.session, difficulty);
+    this.timerMs = gameDurationMs(this.def, difficulty) || GAME_MS;
     this.lastSecond = -1;
     this.lastHud = "";
     this.setPhase("playing");

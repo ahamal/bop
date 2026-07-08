@@ -33,10 +33,6 @@ import { BARRIER_Y, LANE_X, ROAD_Y, TaxiAvatar } from "./avatar.ts";
 // release back to center inside ±LANE_EXIT (hysteresis, so the boundary
 // doesn't chatter), i.e. ~5° of tilt picks a side lane.
 const TILT_RANGE_DEG = 11;
-// Head roll (deg) mapped to the same -1..1 lean signal, so tilting the head
-// alone can pick a lane even when the shoulders aren't visible. A touch wider
-// than the shoulder range — ~7° of head tilt commits a side lane.
-const ROLL_RANGE_DEG = 16;
 const LEAN_SMOOTH_MS = 110; // EMA on the lean signal (shoulder tilt jitters)
 const LANE_ENTER = 0.42;
 const LANE_EXIT = 0.22;
@@ -272,18 +268,14 @@ class TaxiMicrogame implements Microgame {
     this.avatar.run(dt);
 
     // Inputs. Lean → lane, with hysteresis so the committed lane only flips
-    // on a deliberate tilt. The lean signal is driven by head roll (always
-    // tracked) OR shoulder tilt (when the body's visible) — whichever gesture
-    // is more committed wins, so a head tilt alone steers and a shoulder lean
-    // still works when the head stays level. Both share the negation: raw
-    // lean-left reads positive, screen-left is -x.
-    const kx = 1 - Math.exp(-dt / LEAN_SMOOTH_MS);
-    let target = Math.max(-1, Math.min(1, -f.metrics.headRoll / ROLL_RANGE_DEG));
+    // on a deliberate tilt. torsoTilt's mirrored sign matches head roll (lean
+    // left = positive) and screen-left is -x, hence the negation. When the
+    // shoulders aren't trackable this frame the lean just holds.
     if (f.metrics.bodyTracked) {
-      const torso = Math.max(-1, Math.min(1, -f.metrics.torsoTilt / TILT_RANGE_DEG));
-      if (Math.abs(torso) > Math.abs(target)) target = torso;
+      const kx = 1 - Math.exp(-dt / LEAN_SMOOTH_MS);
+      const target = Math.max(-1, Math.min(1, -f.metrics.torsoTilt / TILT_RANGE_DEG));
+      this.lean += (target - this.lean) * kx;
     }
-    this.lean += (target - this.lean) * kx;
     if (this.lane === 1) {
       if (this.lean <= -LANE_ENTER) this.lane = 0;
       else if (this.lean >= LANE_ENTER) this.lane = 2;
@@ -405,7 +397,7 @@ export const taxiDef: MicrogameDef = {
   title: "Jaywalker",
   headline: "Robotaxi fleet ships 'assertive mode', pedestrians advised to hustle",
   prompt: { lead: "lean and jump to", action: "DODGE" },
-  hint: "lean or tilt your head to switch lanes · look up to jump the hurdles",
+  hint: "lean to switch lanes · look up to jump the hurdles",
   timeoutWins: true,
   create(canvas, session, level) {
     const avatar = session.attachAvatar(canvas, TaxiAvatar);

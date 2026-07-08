@@ -29,7 +29,7 @@ export function HeroAvatar({ className }: { className?: string }) {
     renderer.setClearAlpha(0);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+    const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 1000);
     camera.position.set(0, 0.3, 7);
     camera.lookAt(0, 0.1, 0);
 

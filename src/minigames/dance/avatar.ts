@@ -8,18 +8,18 @@
 // move tokens — is built and animated by the game inside stageGroup; this
 // class only owns the player figure's placement.
 //
-// Game-specific overrides: the player's depth/translation channels are
-// disabled — only head ROTATION is the dance, so shifting in the chair or
-// leaning in must not move the figure out of formation.
+// The head tracks the full pose — rotation AND x/y/z translation — so it
+// moves with the player's body instead of hanging static over a fixed spot.
 
 import * as THREE from "three";
-import type { HeadPose } from "../../tracking/pose.ts";
 import { AbstractAvatar } from "../../avatar/AbstractAvatar.ts";
 
-// Scaled down and dropped low: front row of the formation, with headroom
-// above for the backup dancers' row and the token lane.
-const AVATAR_SCALE = 0.5;
-const AVATAR_Y = -1.9;
+// Scaled to match the troupe (the base figure is ~2.8× a dancer's size, so it
+// needs a much smaller scale than their ~0.48) and placed so the torso bottom
+// meets the dance floor while the head lands level with the front row's heads
+// — the star, front-and-center and only a touch larger than the backup crew.
+const AVATAR_SCALE = 0.22;
+const AVATAR_Y = -1.47;
 
 export class DanceAvatar extends AbstractAvatar {
   // Field initializers run after super(), so the base scene graph exists.
@@ -35,14 +35,17 @@ export class DanceAvatar extends AbstractAvatar {
     // player group, pose machinery untouched.
     this.playerGroup.add(this.headPivot, this.bodyGroup);
     this.scene.add(this.playerGroup, this.stageGroup);
-  }
 
-  /** Depth is ignored — leaning in must not grow/move the figure. */
-  setZoom(_zoom: number): void {}
+    // (Head translation + depth are left on — no setPose/setZoom overrides —
+    // so the head moves with the body instead of sitting static.)
 
-  /** Keep head rotations (they ARE the dance) but drop the translation
-   * channels, so shifting in the chair can't slide the figure around. */
-  setPose(pose: HeadPose): void {
-    super.setPose({ ...pose, cx: 0, cy: 0 });
+    // Club mood: a dark backdrop and dimmed house lights so the game's
+    // sweeping colored disco lights (added to stageGroup) actually read on
+    // the faceted dancers instead of being washed out by the bright base rig.
+    this.scene.background = new THREE.Color(0x0a0a1f);
+    for (const obj of this.scene.children) {
+      if (obj instanceof THREE.AmbientLight) obj.intensity = 0.32;
+      else if (obj instanceof THREE.DirectionalLight) obj.intensity *= 0.45;
+    }
   }
 }

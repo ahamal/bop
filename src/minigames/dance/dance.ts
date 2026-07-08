@@ -51,10 +51,12 @@ const LINGER_MS = 400; // let the last hit/miss read before resolving
 const HIT_ANIM_MS = 220; // hit chips pop and fade over this long
 
 // Formation: two rows of faceted dancers behind the player (front and center).
-// The back row sits higher, deeper, and smaller — cheap stage perspective.
+// Both rows stand ON the floor — their y is set so each row's feet meet the
+// tile surface (the back row is smaller and deeper, so perspective alone lifts
+// it up the screen; no manual height offset).
 const ROWS = [
-  { xs: [-2.4, -1.2, 1.2, 2.4], y: -1.2, z: -0.9, scale: 0.48 },
-  { xs: [-3.0, -1.7, 0, 1.7, 3.0], y: -0.7, z: -2.3, scale: 0.42 },
+  { xs: [-2.4, -1.2, 1.2, 2.4], y: -1.92, z: -0.9, scale: 0.48 },
+  { xs: [-3.0, -1.7, 0, 1.7, 3.0], y: -1.95, z: -2.3, scale: 0.42 },
 ];
 const ROCK_RAD = 0.14; // body sway amplitude (radians), one side per beat
 const BOUNCE = 0.07; // beat bounce height (world units)
@@ -79,6 +81,10 @@ const CHIP: Record<DanceMove, { icon: string; label: string; color: string }> = 
   tiltRight: { icon: "", label: "tilt right", color: "#c084fc" },
   center: { icon: "◎", label: "center", color: "#34d399" },
 };
+// Disco: four sweeping light colors, a mirror ball, and a flashing floor —
+// all beat-driven in update(). Classic club palette (hot pink, cyan, gold,
+// violet) so each orbiting light washes the faceted dancers a different hue.
+const DISCO_COLORS = [0xff2d95, 0x22d3ee, 0xf5c518, 0x8b5cf6];
 const PANEL_W = 92; // px
 const HIT_FRAC = 0.74; // hit slot sits this far down the panel
 const MISS_COLOR = "#f87171";
@@ -110,6 +116,9 @@ class DanceGame implements Microgame {
   private decidedAt = NaN; // game time the outcome became certain
 
   private dancers: Dancer[] = [];
+  private discoLights: THREE.PointLight[] = [];
+  private ball = new THREE.Group();
+  private floorTiles: THREE.MeshStandardMaterial[] = [];
   private geos: THREE.BufferGeometry[] = [];
   private mats: THREE.Material[] = [];
   private panel: HTMLDivElement;
@@ -258,6 +267,43 @@ class DanceGame implements Microgame {
       }
     });
 
+    // --- Disco kit: sweeping colored lights, a mirror ball, and a glowing
+    // floor. All parented to stageGroup so they tear down with the avatar;
+    // update() drives their orbit, spin, and beat-flash. ---
+    for (const color of DISCO_COLORS) {
+      const light = new THREE.PointLight(color, 0, 26, 1.4);
+      this.discoLights.push(light);
+      this.avatar.stageGroup.add(light);
+    }
+
+    // Mirror ball: a metallic faceted sphere on a thin cord, up over the back
+    // row, catching each orbiting light as it spins.
+    const ballMat = mat(0xdfe6f2);
+    ballMat.metalness = 1;
+    ballMat.roughness = 0.22;
+    ballMat.emissive = new THREE.Color(0x5566aa);
+    ballMat.emissiveIntensity = 0.25;
+    const ballMesh = new THREE.Mesh(geo(new THREE.IcosahedronGeometry(0.5, 1)), ballMat);
+    const cord = new THREE.Mesh(geo(new THREE.CylinderGeometry(0.014, 0.014, 1.5, 4)), mat(0x1b2333));
+    cord.position.y = 1.25;
+    this.ball.add(ballMesh, cord);
+    this.ball.position.set(0, 1.8, -1.6);
+    this.avatar.stageGroup.add(this.ball);
+
+    // Floor grid: emissive tiles under the troupe that flash on the beat.
+    const tileGeo = geo(new THREE.BoxGeometry(2.1, 0.08, 2.1));
+    for (let gx = -2; gx <= 2; gx++) {
+      for (let gz = 0; gz <= 2; gz++) {
+        const tm = mat(0x11162a);
+        tm.emissive = new THREE.Color(0x11162a);
+        tm.emissiveIntensity = 0.15;
+        this.floorTiles.push(tm);
+        const tile = new THREE.Mesh(tileGeo, tm);
+        tile.position.set(gx * 2.24, -2.15, -0.4 - gz * 2.3);
+        this.avatar.stageGroup.add(tile);
+      }
+    }
+
     // --- The 2D rhythm panel, overlaid on the playfield div. The host clips
     // (overflow hidden), so chips can spawn above the visible top. ---
     this.panel = document.createElement("div");
@@ -313,6 +359,22 @@ class DanceGame implements Microgame {
       d.head.rotation.y += ((HEAD_YAW[cur] ?? 0) - d.head.rotation.y) * kHead;
       d.head.rotation.z += ((HEAD_ROLL[cur] ?? 0) - d.head.rotation.z) * kHead;
     }
+
+    // Disco: the colored lights orbit the floor and flare on each beat, the
+    // mirror ball spins, and the floor tiles flash the beat's color. A sharp
+    // attack (bright on the beat, decaying over it) gives the club its pulse.
+    const beatPulse = Math.max(0, 1 - beatFrac * 3);
+    const orbit = this.t / 1400;
+    this.discoLights.forEach((light, i) => {
+      const a = orbit + (i / this.discoLights.length) * Math.PI * 2;
+      light.position.set(Math.cos(a) * 3.2, 2.4 + Math.sin(a * 1.3) * 0.6, -1 + Math.sin(a) * 1.6);
+      light.intensity = 6 + 11 * beatPulse;
+    });
+    this.ball.rotation.y += dt * 0.0016;
+    this.floorTiles.forEach((tm, i) => {
+      tm.emissive.setHex(DISCO_COLORS[(beat + i) % DISCO_COLORS.length]);
+      tm.emissiveIntensity = (beat + i) % 3 === 0 ? 0.12 + 0.85 * beatPulse : 0.08;
+    });
 
     // Chips: spawn LEAD_MS out, ride the panel down (px mapped from time so
     // arrival at the slot IS the beat), judge inside the window.

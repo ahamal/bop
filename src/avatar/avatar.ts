@@ -111,7 +111,7 @@ export abstract class Avatar {
     // (a dark frame on the dev page, the page itself on the play screen).
     this.renderer.setClearAlpha(0);
 
-    this.camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+    this.camera = new THREE.PerspectiveCamera(35, 1, 0.1, 1000);
     this.frameCamera();
 
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));

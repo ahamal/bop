@@ -56,8 +56,8 @@ const GRACE_MS = [1000, 850, 720, 600, 420];
 // The round's FIRST red turns slower — a stretched grace while the player is
 // still finding the rhythm; later reds run at the level's true pace.
 const FIRST_RED_GRACE = 1.25;
-const MOVE_TOL = 0.14; // run charge below this is "standing still"
-const VIOLATION_MS = 150;
+const MOVE_TOL = 0.2; // run charge below this is "standing still"
+const VIOLATION_MS = 230; // motion above tolerance must persist this long to catch
 
 // --- The course, per level. The race needs room to breathe, so this game
 // asks the director for a longer clock than the standard 10s.

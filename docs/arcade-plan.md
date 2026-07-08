@@ -6,34 +6,38 @@
 
 The arcade becomes a single WarioWare-style run: no game picker. Enter →
 camera calibrates (mesh pulses, then goes live; music starts) → "Nod to
-start" → cutscene → 10s microgame → cutscene → … Lives run out or round 5
+start" → cutscene → 10s microgame → cutscene → … Lives run out or round 3
 survived → end screen.
 
 ## Run structure
 
 - **Round** = 8 microgames drawn from a shuffled bag (no repeats until the
   bag of 12 empties, then reshuffle).
-- After 8 games → **level +1** (1→5), shown ticking up in the cutscene.
+- After 8 games → **level +1** (1→3), shown ticking up in the cutscene.
+  The run is three levels, but each samples a spread-out tier of the games'
+  5-step difficulty curves — level 1→tier 1, level 2→tier 3, level 3→tier 5
+  (`DIFFICULTY_STEP` in director.ts) — so every round is a real jump and the
+  hardest level-5 twists still appear. The games keep their 5 tiers.
 - **Lives**: start 4; fail a game → −1; 0 → game over + score screen.
 - **Boss slot** (BUILT): after game 8 of every round, a final boss plays
   instead of a bag draw — it GATES the level. A loss costs a life and
   replays the SAME fight; a win opens the next level, and beating the
-  level-5 boss is the run's win screen. Bosses are not in the bag; they
+  level-3 boss is the run's win screen. Bosses are not in the bag; they
   appear in the practice picker, get a red action word on the prompt card,
   and a diamond pip after the 8 dots on the stats card. Several boss
   candidates are being tried (`BOSSES` in the registry — currently The
   Keep; The Algorithm was cut, its dodge/tuck stack too flaky seated): the
   director draws one per round,
   varying across rounds, and the dev panel can pin the pool to one candidate.
-- **Score** = games cleared (bosses count). Full run = 5×(8+1) = 45 plays.
-- Catalog math: 12 games × 5 levels = 60 variants. "150" needs 30 games —
-  later target, spares list below.
-- OPEN QUESTION: end after round 5 (recommended, winnable session) vs
+- **Score** = games cleared (bosses count). Full run = 3×(8+1) = 27 plays.
+- Catalog math: 12 games × 5 tiers = 60 variants (the run visits 3 of the 5).
+  "150" needs 30 games — later target, spares list below.
+- OPEN QUESTION: end after round 3 (recommended, winnable session) vs
   endless at level cap until lives run out.
 
 ## Cutscene (~3s between every game)
 
-1. **Stats card** (~1.2s): `LEVEL 2 · ROUND 2/5 · ♥♥♥`. The changed stat
+1. **Stats card** (~1.2s): `LEVEL 2 · ROUND 2/3 · ♥♥♥`. The changed stat
    animates (level digit rolls up, lost heart pops/greys). Flash in fast,
    hold, flash out.
 2. **Prompt card** (~1.2s): two-tier type — lead-in small, action word huge

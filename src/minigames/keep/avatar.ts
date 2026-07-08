@@ -140,11 +140,11 @@ export class DragonAvatar extends Avatar {
     super(canvas);
     // A real sky: the base renderer is transparent (the page showed through
     // as grey above the horizon at this camera distance), so paint the
-    // backdrop. The base camera's draw distance (far = 100) suits a
-    // head-and-shoulders portrait, not a 240-unit sea — push it past the
-    // water's edge so the world reaches the horizon instead of clipping.
+    // backdrop. The base camera's draw distance suits a head-and-shoulders
+    // portrait, not a 240-unit sea — push it well past the water's edge so
+    // the world reaches the horizon instead of clipping.
     this.scene.background = new THREE.Color(0xa5c7e0);
-    this.camera.far = 600;
+    this.camera.far = 1000;
     this.camera.updateProjectionMatrix();
     this.flightGroup.position.set(0, FLY_Y, 0);
     // The figure faces along the flight direction (flight-forward is -z, the
