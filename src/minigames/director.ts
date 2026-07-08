@@ -6,10 +6,11 @@
 // PlayScreen. Per-frame gameplay stays inside the running Microgame, which
 // renders through its own Avatar subclass on the playfield canvas.
 //
-// Run structure (docs/arcade-plan.md): a round is GAMES_PER_ROUND microgames
-// drawn from a bag with no repeats until it empties; after each round the
-// level ticks up (1→5). Lives start at 4, a loss costs one, 0 ends the run;
-// surviving round 5 wins it. Score = games cleared.
+// Run structure (docs/arcade-plan.md): a round is one shuffled pass through
+// every enabled microgame (each plays once, fresh order per level), then a
+// boss; after each round the level ticks up (1→3). Lives start at 4, a loss
+// costs one, 0 ends the run; beating the level-3 boss wins it. Score = games
+// cleared.
 //
 // The director also fires the result stingers (win chime / fail thud + music
 // duck) — it's the only place that knows the exact transition frame.
@@ -34,7 +35,9 @@ export const RESULT_MS = 1000;
 /** One microgame's clock — the countdown ring's full sweep. */
 export const GAME_MS = 10_000;
 
-export const GAMES_PER_ROUND = 8;
+// A round is ONE shuffled pass through every enabled microgame — each plays
+// exactly once, in a fresh random order per level — then the boss. So the
+// round length is the size of the game list, not a fixed number.
 // The run is three levels (displayed 1→2→3), but each pulls its difficulty
 // from a spread-out tier of the games' 5-step curves — so every round is a
 // real jump (and the games' hardest level-5 twists still show up) instead of
@@ -61,6 +64,8 @@ export interface ArcadeSnapshot {
   level: Level;
   /** 1-based game number within the current round. */
   gameNum: number;
+  /** How many microgames this round holds (before the boss). */
+  gamesPerRound: number;
   lives: number;
   score: number;
   /** Total games started this visit (across runs) — keys the playfield canvas
@@ -88,6 +93,9 @@ export class ArcadeDirector {
   private score = 0;
   private plays = 0;
   private bag: MicrogameDef[] = [];
+  // How many microgames this round holds (one shuffled pass of the enabled
+  // list); set when a round starts, before the boss slot.
+  private gamesPerRound = MICROGAMES.length;
   private def: MicrogameDef | null = null;
   private lastBoss: MicrogameDef | null = null;
   private game: Microgame | null = null;
@@ -138,11 +146,32 @@ export class ArcadeDirector {
     }
   }
 
+  /** Dev: instantly clear the current level — same as beating its boss, so
+   * the run jumps to the next level (or the win screen at the cap). No-op
+   * outside a live run. */
+  devCompleteLevel(): void {
+    if (this.phase === "nod-wait" || this.phase === "gameover" || this.phase === "win") return;
+    this.game?.dispose();
+    this.game = null;
+    this.outcome = null;
+    if (this.level >= MAX_LEVEL) {
+      playCelebrate();
+      this.setPhase("win");
+      return;
+    }
+    this.level = (this.level + 1) as Level;
+    this.beginRound();
+    this.statChange = "level";
+    this.drawNext();
+    this.setPhase("stats");
+  }
+
   get snapshot(): ArcadeSnapshot {
     return {
       phase: this.phase,
       level: this.level,
       gameNum: this.gameNum,
+      gamesPerRound: this.gamesPerRound,
       lives: this.lives,
       score: this.score,
       plays: this.plays,
@@ -164,14 +193,21 @@ export class ArcadeDirector {
   startRun(): void {
     if (this.phase !== "nod-wait" && this.phase !== "gameover" && this.phase !== "win") return;
     this.level = this.startLevel;
-    this.gameNum = 1;
     this.lives = START_LIVES;
     this.score = 0;
-    this.bag = [];
     this.outcome = null;
     this.statChange = null;
+    this.beginRound();
     this.drawNext();
     this.setPhase("stats");
+  }
+
+  /** Start a round: a fresh shuffled pass through every enabled game, so each
+   *  level plays the whole list once in a new random order. */
+  private beginRound(): void {
+    this.gameNum = 1;
+    this.bag = shuffle([...this.pool(MICROGAMES)]);
+    this.gamesPerRound = this.bag.length;
   }
 
   /** Tear down whatever game is running. Call on unmount. */
@@ -293,7 +329,7 @@ export class ArcadeDirector {
         return;
       }
       this.level = (this.level + 1) as Level;
-      this.gameNum = 1;
+      this.beginRound();
       this.statChange = "level";
       this.outcome = null;
       this.drawNext();
@@ -301,8 +337,8 @@ export class ArcadeDirector {
       return;
     }
     this.gameNum += 1;
-    if (this.gameNum > GAMES_PER_ROUND) {
-      // Round cleared — a boss blocks the level door (the 9th slot).
+    if (this.gameNum > this.gamesPerRound) {
+      // Round cleared — a boss blocks the level door (the final slot).
       this.def = this.drawBoss();
       this.plays += 1;
       this.outcome = null;
