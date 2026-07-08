@@ -12,6 +12,7 @@ import type { FrameResult, TrackingSession } from "../tracking/session.ts";
 import { chompDef } from "./chomp/chomp.ts";
 import { danceDef } from "./dance/dance.ts";
 import { droneDef } from "./drone/drone.ts";
+import { keepDef } from "./keep/keep.ts";
 import { mimicDef } from "./mimic/mimic.ts";
 import { redLightDef } from "./redlight/redlight.ts";
 import { taxiDef } from "./taxi/taxi.ts";
@@ -64,3 +65,10 @@ export const MICROGAMES: readonly MicrogameDef[] = [
   redLightDef,
   mimicDef,
 ];
+
+// The boss slot: NOT in the bag — the director plays one boss after the
+// eight games of every round (it gates the level; docs/arcade-plan.md).
+// Several candidates are being tried out; the director draws one per round
+// (a loss replays the SAME boss), the practice page lists them all, and the
+// dev panel can pin the pool to a single candidate.
+export const BOSSES: readonly MicrogameDef[] = [keepDef];

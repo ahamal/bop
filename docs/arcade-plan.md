@@ -15,8 +15,17 @@ survived → end screen.
   bag of 12 empties, then reshuffle).
 - After 8 games → **level +1** (1→5), shown ticking up in the cutscene.
 - **Lives**: start 4; fail a game → −1; 0 → game over + score screen.
-  Survive round 5 → win screen (ConfettiBurst exists).
-- **Score** = games cleared. Full run = 5×8 = 40 plays ≈ 9 min.
+- **Boss slot** (BUILT): after game 8 of every round, a final boss plays
+  instead of a bag draw — it GATES the level. A loss costs a life and
+  replays the SAME fight; a win opens the next level, and beating the
+  level-5 boss is the run's win screen. Bosses are not in the bag; they
+  appear in the practice picker, get a red action word on the prompt card,
+  and a diamond pip after the 8 dots on the stats card. Several boss
+  candidates are being tried (`BOSSES` in the registry — currently The
+  Keep; The Algorithm was cut, its dodge/tuck stack too flaky seated): the
+  director draws one per round,
+  varying across rounds, and the dev panel can pin the pool to one candidate.
+- **Score** = games cleared (bosses count). Full run = 5×(8+1) = 45 plays.
 - Catalog math: 12 games × 5 levels = 60 variants. "150" needs 30 games —
   later target, spares list below.
 - OPEN QUESTION: end after round 5 (recommended, winnable session) vs
@@ -83,6 +92,8 @@ open, chin tuck, hold-still.
 | 12 | Stay Live | Anchor's 36th straight hour | hold **STEADY** | keep head level/still while the studio shakes | narrower band, jump scares |
 | 13 | Green Light, Red Light | Killer doll wins daytime TV, again | shake to **RUN** | head-shakes pump a run charge; freeze when the doll turns; reach the line | longer course, shorter greens/graces |
 | 14 | Prove You're Human | CAPTCHA v9 requires interpretive dance | memorize, then **MIMIC** | cards reveal a move sequence for 3s, flip down; perform from memory, two tries per card | 6-card sequence |
+| ★ | Final Boss: The Algorithm | Recommendation engine achieves physical form | dodge, then **STRIKE** | boss slot after every round: tilt away from side posts, tuck under banners (judged at the player plane); when the eye opens, land the flashed gesture card inside the shrinking ring to crack a core; deplete cores to win, lose the shield pips = KO | more cores, bigger/faster volleys, shorter windows, thinner shield |
+| ★ | Final Boss: The Keep | Rewilded dragons torch record number of castles | feast, then **TORCH** | boss-pool candidate, YOU are the dragon (chase cam, Drone chassis: tilt banks the turn): fly around the keep, fly into floating embers to auto-swallow them (stock up to 3 — the dragon clutches one glowing orb each + belly lights), open mouth to breathe a fireball per open — windows glow when the shot lines up; the keep mortars flaming boulders at a point leading your flight (ring + filling disc telegraph = the flight time), turn to dodge; burn its HP down to win, boulder hits = KO | more HP, faster/steadier mortars, shorter flights, bigger blasts, thinner shield |
 
 Spares (road to 30): Stamp It (nod-stamp election ballots on a conveyor),
 Sun Chaser (tilt solar panel to track the sun), Splashdown (lean capsule

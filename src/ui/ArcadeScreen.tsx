@@ -24,13 +24,15 @@ import {
   STATS_MS,
   type ArcadeSnapshot,
 } from "../minigames/director.ts";
-import { MICROGAMES, gameDurationMs, type Level } from "../minigames/registry.ts";
+import { BOSSES, MICROGAMES, gameDurationMs, type Level } from "../minigames/registry.ts";
 import { CountdownRing } from "./CountdownRing.tsx";
 
 // --- Dev panel: playable-game checkboxes + starting/current level, persisted
-// across reloads. Checked ids feed the director's bag filter; the level jumps
-// the run (mid-run it applies from the next game).
+// across reloads. Checked ids feed the director's bag AND boss-pool filters
+// (checking a single boss pins the boss slot to that candidate); the level
+// jumps the run (mid-run it applies from the next game).
 const DEV_KEY = "arcade-dev";
+const ALL_GAMES = [...MICROGAMES, ...BOSSES];
 
 interface DevConfig {
   games: string[]; // enabled game ids
@@ -40,12 +42,12 @@ interface DevConfig {
 function loadDevConfig(): DevConfig {
   try {
     const raw = JSON.parse(localStorage.getItem(DEV_KEY) ?? "");
-    const ids = new Set(MICROGAMES.map((d) => d.id));
+    const ids = new Set(ALL_GAMES.map((d) => d.id));
     const games = Array.isArray(raw.games) ? raw.games.filter((g: string) => ids.has(g)) : [];
     const level = [1, 2, 3, 4, 5].includes(raw.level) ? (raw.level as Level) : 1;
-    return { games: games.length ? games : MICROGAMES.map((d) => d.id), level };
+    return { games: games.length ? games : ALL_GAMES.map((d) => d.id), level };
   } catch {
-    return { games: MICROGAMES.map((d) => d.id), level: 1 };
+    return { games: ALL_GAMES.map((d) => d.id), level: 1 };
   }
 }
 
@@ -62,7 +64,7 @@ function DevPanel({ dev, setDev }: { dev: DevConfig; setDev: (d: DevConfig) => v
       {open && (
         <div className="mb-2 w-52 rounded-xl bg-panel p-3 shadow-lg ring-1 ring-black/10 dark:ring-white/10">
           <p className="mb-1.5 font-semibold uppercase tracking-wider text-muted">Games</p>
-          {MICROGAMES.map((d) => (
+          {ALL_GAMES.map((d) => (
             <label key={d.id} className="flex cursor-pointer items-center gap-2 py-0.5 text-text">
               <input
                 type="checkbox"
@@ -157,7 +159,7 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
       {nodWait ? (
         <SessionLobby
           title="Minigame Arcade"
-          subtitle={`${MAX_LEVEL} rounds · ${GAMES_PER_ROUND} games each · ${START_LIVES} lives`}
+          subtitle={`${MAX_LEVEL} rounds · ${GAMES_PER_ROUND} games + a boss · ${START_LIVES} lives`}
           screen={screen}
           onStart={() => directorRef.current?.startRun()}
           onExit={onExit}
@@ -236,20 +238,29 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
                       ))}
                     </span>
                   </div>
-                  {/* Game pips: where this game sits in the round of 8. */}
-                  <div className="flex items-center gap-1.5" aria-label={`Game ${arc.gameNum} of ${GAMES_PER_ROUND}`}>
+                  {/* Game pips: where this game sits in the round of 8, plus
+                      the boss diamond waiting at the level door. */}
+                  <div
+                    className="flex items-center gap-1.5"
+                    aria-label={arc.boss ? "Boss fight" : `Game ${arc.gameNum} of ${GAMES_PER_ROUND}`}
+                  >
                     {Array.from({ length: GAMES_PER_ROUND }, (_, i) => (
                       <span
                         key={i}
                         className={`h-1.5 w-1.5 rounded-full ${
                           i < arc.gameNum - 1
                             ? "bg-accent"
-                            : i === arc.gameNum - 1
+                            : i === arc.gameNum - 1 && !arc.boss
                               ? "animate-pulse ring-1 ring-inset ring-accent"
                               : "bg-black/10 dark:bg-white/10"
                         }`}
                       />
                     ))}
+                    <span
+                      className={`ml-0.5 h-2 w-2 rotate-45 ${
+                        arc.boss ? "animate-pulse bg-red-500" : "bg-black/10 dark:bg-white/10"
+                      }`}
+                    />
                   </div>
                   <p className="text-xs tabular-nums text-muted">score {arc.score}</p>
                 </div>
@@ -267,7 +278,11 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
                     2026 · {def.headline}
                   </p>
                   <p className="mt-2 text-lg text-muted">{def.prompt.lead}</p>
-                  <p className="text-6xl font-black tracking-tight text-text">
+                  <p
+                    className={`text-6xl font-black tracking-tight ${
+                      arc?.boss ? "text-red-500" : "text-text"
+                    }`}
+                  >
                     {def.prompt.action}
                   </p>
                   <p className="mt-2 text-sm text-muted">{def.hint}</p>
@@ -284,7 +299,7 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
                     arc.outcome === "win" ? "text-accent" : "text-red-500"
                   }`}
                 >
-                  {arc.outcome === "win" ? "NICE!" : "MISS!"}
+                  {arc.outcome === "win" ? (arc.boss ? "DEFEATED!" : "NICE!") : "MISS!"}
                 </p>
               </div>
             )}
@@ -299,7 +314,7 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
                   {phase === "win" ? "YOU WIN!" : "GAME OVER"}
                 </p>
                 <p className="text-sm tabular-nums text-muted">
-                  score {arc.score} / {MAX_LEVEL * GAMES_PER_ROUND}
+                  score {arc.score} / {MAX_LEVEL * (GAMES_PER_ROUND + 1)}
                 </p>
                 <p className="text-sm text-muted">Nod to play again</p>
                 <Button

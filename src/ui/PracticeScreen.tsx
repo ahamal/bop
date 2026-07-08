@@ -16,6 +16,7 @@ import { SessionLobby, SessionShell, useTrackingSession } from "./SessionScreen.
 import { playDone, playFail } from "../audio/sfx.ts";
 import { GAME_MS } from "../minigames/director.ts";
 import {
+  BOSSES,
   MICROGAMES,
   gameDurationMs,
   type Level,
@@ -128,7 +129,7 @@ export function PracticeScreen({ onExit }: { onExit: () => void }) {
           <h1 className="mb-1 text-center text-2xl font-bold tracking-tight">Practice</h1>
           <p className="mb-5 text-center text-sm text-muted">pick an activity and a level</p>
           <ul className="flex flex-col gap-1.5">
-            {MICROGAMES.map((d) => (
+            {[...MICROGAMES, ...BOSSES].map((d) => (
               <li
                 key={d.id}
                 className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 transition hover:bg-black/5 dark:hover:bg-white/5"

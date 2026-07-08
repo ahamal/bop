@@ -18,6 +18,7 @@ import { arcadeMusicPlayer } from "../audio/player.ts";
 import { playCelebrate, playDone, playFail } from "../audio/sfx.ts";
 import type { FrameResult, TrackingSession } from "../tracking/session.ts";
 import {
+  BOSSES,
   MICROGAMES,
   gameDurationMs,
   type Level,
@@ -68,6 +69,8 @@ export interface ArcadeSnapshot {
   statChange: "level" | "life" | null;
   /** The running game's progress line ("2 / 5"), for the HUD chip. */
   hud: string;
+  /** This play is the round's boss fight (the 9th slot, gating the level). */
+  boss: boolean;
 }
 
 export class ArcadeDirector {
@@ -79,6 +82,7 @@ export class ArcadeDirector {
   private plays = 0;
   private bag: MicrogameDef[] = [];
   private def: MicrogameDef | null = null;
+  private lastBoss: MicrogameDef | null = null;
   private game: Microgame | null = null;
   private outcome: Outcome | null = null;
   private statChange: "level" | "life" | null = null;
@@ -98,12 +102,23 @@ export class ArcadeDirector {
     private canvas: () => HTMLCanvasElement | null,
   ) {}
 
-  /** Dev panel: restrict the bag to these game ids (empty/unknown = all). */
+  /** Dev panel: restrict the bag AND the boss pool to these game ids
+   * (empty/unknown = all; a pool with none of its games enabled stays full,
+   * so checking only bag games never leaves the boss slot empty). */
   setEnabledGames(ids: readonly string[]): void {
     const set = new Set(ids);
-    this.enabledIds = MICROGAMES.some((d) => set.has(d.id)) ? set : null;
+    this.enabledIds = set.size > 0 ? set : null;
     // Drop queued games that are no longer enabled; the bag refills filtered.
-    this.bag = this.bag.filter((d) => !this.enabledIds || this.enabledIds.has(d.id));
+    const bagPool = new Set(this.pool(MICROGAMES));
+    this.bag = this.bag.filter((d) => bagPool.has(d));
+  }
+
+  // A pool filtered to the dev panel's enabled ids, falling back to the full
+  // pool when the filter would empty it.
+  private pool(defs: readonly MicrogameDef[]): readonly MicrogameDef[] {
+    if (!this.enabledIds) return defs;
+    const on = defs.filter((d) => this.enabledIds!.has(d.id));
+    return on.length > 0 ? on : defs;
   }
 
   /** Dev panel: jump the run to this level — runs start here, and mid-run the
@@ -129,6 +144,7 @@ export class ArcadeDirector {
       timeLeft: Math.max(0, Math.ceil(this.timerMs / 1000)),
       statChange: this.statChange,
       hud: this.game?.hud ?? "",
+      boss: this.def !== null && BOSSES.includes(this.def),
     };
   }
 
@@ -206,14 +222,19 @@ export class ArcadeDirector {
 
   // No repeats until the bag of every enabled game empties, then reshuffle.
   private drawNext(): void {
-    if (this.bag.length === 0) {
-      const pool = this.enabledIds
-        ? MICROGAMES.filter((d) => this.enabledIds!.has(d.id))
-        : [...MICROGAMES];
-      this.bag = shuffle(pool);
-    }
+    if (this.bag.length === 0) this.bag = shuffle([...this.pool(MICROGAMES)]);
     this.def = this.bag.pop()!;
     this.plays += 1;
+  }
+
+  // One boss per round from the candidate pool, varying across rounds when
+  // there's more than one (a boss LOSS never redraws — advance() keeps def).
+  private drawBoss(): MicrogameDef {
+    const pool = this.pool(BOSSES);
+    const fresh = pool.filter((d) => d !== this.lastBoss);
+    const pick = fresh.length > 0 ? fresh[Math.floor(Math.random() * fresh.length)] : pool[0];
+    this.lastBoss = pick;
+    return pick;
   }
 
   private beginGame(): void {
@@ -249,8 +270,15 @@ export class ArcadeDirector {
     // A loss greys a heart on the next stats card; a round rollover trumps it
     // (the level digit roll is the bigger beat — the missing heart still shows).
     this.statChange = this.outcome === "lose" ? "life" : null;
-    this.gameNum += 1;
-    if (this.gameNum > GAMES_PER_ROUND) {
+    if (this.def && BOSSES.includes(this.def)) {
+      // The boss gates the level: a loss (with lives left) replays the fight;
+      // beating it opens the next level — or the run's win after level 5.
+      if (this.outcome === "lose") {
+        this.outcome = null;
+        this.plays += 1; // fresh canvas for the rematch
+        this.setPhase("stats");
+        return;
+      }
       if (this.level >= MAX_LEVEL) {
         playCelebrate();
         this.setPhase("win");
@@ -259,6 +287,19 @@ export class ArcadeDirector {
       this.level = (this.level + 1) as Level;
       this.gameNum = 1;
       this.statChange = "level";
+      this.outcome = null;
+      this.drawNext();
+      this.setPhase("stats");
+      return;
+    }
+    this.gameNum += 1;
+    if (this.gameNum > GAMES_PER_ROUND) {
+      // Round cleared — a boss blocks the level door (the 9th slot).
+      this.def = this.drawBoss();
+      this.plays += 1;
+      this.outcome = null;
+      this.setPhase("stats");
+      return;
     }
     this.outcome = null;
     this.drawNext();

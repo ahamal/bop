@@ -133,7 +133,11 @@ character); drop translations and zoom unless they ARE the mechanic.
 figure group `Math.PI` about y AND set `protected viewSign = -1 as const;` —
 the flip negates how mirrored channels render, and viewSign compensates.
 Forgetting viewSign makes left/right feel backwards. See taxi/redlight
-avatars.
+avatars. PITCH is NOT covered by viewSign, and the y-flip visually inverts
+x-rotations too — so if the figure's head is visible (a snout, a hat brim),
+negate pitch in your setPose override or chin-down will read as chin-up
+(the Keep dragon's lesson):
+`setPose(p) { super.setPose({ ...p, pitch: -p.pitch, cx: 0, cy: 0 }); }`
 
 **`declare` gotcha:** if your subclass assigns fields inside a method the
 BASE constructor calls (e.g. `buildHead`), declare them with
