@@ -91,6 +91,14 @@ export function GameScreen({
             {label}
           </a>
         ))}
+        <a
+          href="https://github.com/ahamal/bop"
+          target="_blank"
+          rel="noreferrer"
+          className="transition hover:text-text"
+        >
+          GitHub
+        </a>
       </nav>
     </div>
   );
