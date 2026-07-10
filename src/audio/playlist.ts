@@ -42,7 +42,6 @@ export const TRACKS: readonly Track[] = [
 export const ARCADE_TRACKS: readonly Track[] = [
   t("games/alexgrohl-retro-electronic-535019.mp3", "Retro Electronic", "AlexGrohl", "arcade"),
   t("games/bransboynd-retro-game-402454.mp3", "Retro Game", "Bransboynd", "arcade"),
-  t("games/djartmusic-best-game-console-301284.mp3", "Best Game Console", "DJARTMUSIC", "arcade"),
   t("games/hitslab-gaming-game-video-game-music-474671.mp3", "Gaming", "HitsLab", "arcade"),
   t("games/maksymmalko-game-minecraft-gaming-background-music-402451.mp3", "Gaming Background", "Maksym Malko", "arcade"),
   t("games/maksymmalko-roblox-minecraft-fortnite-video-game-music-358426.mp3", "Video Game Music", "Maksym Malko", "arcade"),

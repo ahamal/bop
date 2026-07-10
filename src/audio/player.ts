@@ -1,7 +1,7 @@
 // The music player engine — plain TS, no React. Owns a single HTMLAudioElement,
 // walks the playlist with auto-advance, and notifies subscribers only on coarse
 // changes (track switch, play/pause), so the React shell just re-renders a
-// label and an icon. Volume defaults to 50%.
+// label and an icon. Volume defaults to 40% and persists per player.
 
 import { ARCADE_TRACKS, TRACKS, type Track } from "./playlist.ts";
 
@@ -20,11 +20,12 @@ class MusicPlayer {
   private listeners = new Set<Listener>();
   // The user-facing volume. The element's actual volume is base × duckFactor,
   // so a duck never disturbs the volume the slider shows/sets.
-  private base = 0.5;
+  private base: number;
   private duckFactor = 1;
   private duckTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(tracks: readonly Track[]) {
+  constructor(tracks: readonly Track[], private volumeKey: string) {
+    this.base = loadVolume(volumeKey);
     this.order = shuffle(tracks);
     this.audio.volume = this.base;
     this.audio.preload = "none";
@@ -89,6 +90,11 @@ class MusicPlayer {
   setVolume(v: number): void {
     this.base = Math.max(0, Math.min(1, v));
     this.apply();
+    try {
+      localStorage.setItem(this.volumeKey, String(this.base));
+    } catch {
+      // Quota or unavailable storage — keep the in-memory value anyway.
+    }
     this.emit();
   }
 
@@ -133,6 +139,21 @@ class MusicPlayer {
   }
 }
 
+const DEFAULT_VOLUME = 0.4;
+
+function loadVolume(key: string): number {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw !== null) {
+      const v = Number(raw);
+      if (Number.isFinite(v) && v >= 0 && v <= 1) return v;
+    }
+  } catch {
+    // Unavailable storage — fall back to the default.
+  }
+  return DEFAULT_VOLUME;
+}
+
 // Fisher–Yates, non-mutating.
 function shuffle(tracks: readonly Track[]): Track[] {
   const out = [...tracks];
@@ -145,5 +166,5 @@ function shuffle(tracks: readonly Track[]): Track[] {
 
 // Each queue is shuffled on load and reshuffled when exhausted. One player per
 // context — the routine and the arcade never share a queue or a paused state.
-export const musicPlayer = new MusicPlayer(TRACKS);
-export const arcadeMusicPlayer = new MusicPlayer(ARCADE_TRACKS);
+export const musicPlayer = new MusicPlayer(TRACKS, "bop:volume");
+export const arcadeMusicPlayer = new MusicPlayer(ARCADE_TRACKS, "bop:volume:arcade");

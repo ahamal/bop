@@ -72,10 +72,10 @@ export function playDone(): void {
   swish(0.05, 0.25);
 }
 
-/** One credited second of hold progress: a very quiet "tk". Slightly brighter
+/** One credited second of hold progress: a quiet "tk". Slightly brighter
  *  and firmer for the last few seconds ("almost there"). */
 export function playTick(nearEnd = false): void {
-  tap(0, nearEnd ? 3000 : 2200, 0.03, nearEnd ? 0.4 : 0.25);
+  tap(0, nearEnd ? 3000 : 2200, 0.03, nearEnd ? 0.7 : 0.5);
 }
 
 /** Microgame lost: a rounded low "duh" — a smaller, darker cousin of the
