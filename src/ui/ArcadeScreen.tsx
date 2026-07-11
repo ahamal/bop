@@ -205,6 +205,15 @@ export function ArcadeScreen({ onExit }: { onExit: () => void }) {
                     {arc.hud}
                   </span>
                 )}
+                {/* A quiet reminder of the goal, so players who blinked past the
+                    prompt card still know what to do. Centered along the bottom,
+                    clear of the clock (top-left), the HUD chip (bottom-left), and
+                    Dance's rhythm panel (right edge). */}
+                {arc.def?.hint && (
+                  <span className="pointer-events-none absolute inset-x-0 bottom-3 mx-auto max-w-[70%] w-fit rounded-md bg-black/50 px-3 py-1 text-center text-xs font-medium leading-snug text-white/90">
+                    {arc.def.hint}
+                  </span>
+                )}
               </>
             )}
 

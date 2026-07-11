@@ -3,8 +3,8 @@
 // the pages themselves pure content.
 
 import type { ReactNode } from "react";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { ThemeIconButton } from "./ThemeIconButton.tsx";
+import { BackBar } from "./BackBar.tsx";
 
 export function InfoPage({
   title,
@@ -19,19 +19,12 @@ export function InfoPage({
 }) {
   return (
     <div className="min-h-screen bg-bg text-text">
+      <BackBar onBack={onExit} />
       <div className="absolute right-4 top-4">
         <ThemeIconButton />
       </div>
 
-      <div className="mx-auto max-w-2xl px-6 pb-32 pt-12">
-        <button
-          onClick={onExit}
-          className="mb-8 inline-flex items-center gap-1.5 text-sm text-muted transition hover:text-text"
-        >
-          <ArrowLeftIcon className="h-4 w-4" />
-          Back
-        </button>
-
+      <div className="mx-auto max-w-2xl px-6 pb-32 pt-16">
         <h1 className="mb-2 text-4xl font-bold tracking-tight">{title}</h1>
         <p className="mb-10 text-muted">{subtitle}</p>
 

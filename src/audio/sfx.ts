@@ -78,6 +78,12 @@ export function playTick(nearEnd = false): void {
   tap(0, nearEnd ? 3000 : 2200, 0.03, nearEnd ? 0.7 : 0.5);
 }
 
+/** The half-second between ticks: a fainter, duller "t" from the same family,
+ *  quiet enough to sit underneath playTick rather than compete with it. */
+export function playTickSoft(): void {
+  tap(0, 1800, 0.025, 0.18);
+}
+
 /** Microgame lost: a rounded low "duh" — a smaller, darker cousin of the
  *  celebrate foomp, capped with a dull knock. Reads instantly as "life gone"
  *  next to the bright rising playDone, still melody-free. */

@@ -101,8 +101,8 @@ const WIN_OUTRO_MS = 1800;
 // fixed slice of time for every tank the level's quota demands, so a bigger
 // quota buys proportionally more time. The win outro must resolve before it
 // or a hit in the final second would time out as a loss.
-const CLOCK_BASE_MS = 11_000;
-const CLOCK_PER_TANK_MS = 3_500;
+const CLOCK_BASE_MS = 22_000;
+const CLOCK_PER_TANK_MS = 7_000;
 const clockMs = (level: Level): number => CLOCK_BASE_MS + CLOCK_PER_TANK_MS * QUOTA[level - 1];
 const OUTRO_MARGIN_MS = 250;
 

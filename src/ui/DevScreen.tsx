@@ -5,7 +5,7 @@
 // shoulder overlay, metrics + states panel, onset chip log, fps, recenter).
 
 import { useEffect, useRef } from "react";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { BackBar } from "./BackBar.tsx";
 import { Button } from "./Button.tsx";
 import { ThemeIconButton } from "./ThemeIconButton.tsx";
 import { TrackingSession, type FrameResult } from "../tracking/session.ts";
@@ -167,18 +167,12 @@ export function DevScreen() {
 
   return (
     <div className="min-h-screen bg-bg text-text">
+      <BackBar />
       <div className="absolute right-4 top-4">
         <ThemeIconButton />
       </div>
 
-      <main className="mx-auto w-full max-w-[960px] px-6 py-12">
-        <a
-          href="#"
-          className="mb-8 inline-flex items-center gap-1.5 text-sm text-muted transition hover:text-text"
-        >
-          <ArrowLeftIcon className="h-4 w-4" />
-          Back
-        </a>
+      <main className="mx-auto w-full max-w-[960px] px-6 pb-12 pt-16">
         <h1 className="mb-1 text-2xl font-bold tracking-tight">Head tracking diagnostics</h1>
         <p className="mb-6 text-muted">
           Look L/R · up/down · tilt L/R · tuck your chin.

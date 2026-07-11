@@ -14,9 +14,16 @@
 //                       the loading indicator), "Nod to start" + a detail line
 //                       once calibrated, Recenter/Start buttons a beat later,
 //                       and the camera-failure card with a way back home.
+//   HandsFreeGate       a mobile-only acknowledgement shown BEFORE any of the
+//                       above mounts, so a handheld user props the phone up
+//                       before the camera even starts.
 
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { ArrowLeftIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowLeftIcon,
+  DevicePhoneMobileIcon,
+  ExclamationTriangleIcon,
+} from "@heroicons/react/24/outline";
 import { ThemeIconButton } from "./ThemeIconButton.tsx";
 import { Button } from "./Button.tsx";
 import { MusicPlayer } from "./MusicPlayer.tsx";
@@ -313,5 +320,38 @@ export function SessionLobby({
         )}
       </div>
     </>
+  );
+}
+
+/** Mobile gate: on a touch-primary device the camera can't track a moving
+ *  phone, so require a hands-free acknowledgement BEFORE the session mounts (and
+ *  the camera starts). On desktop, or once confirmed, it just renders children —
+ *  which is what actually mounts the tracking session. */
+export function HandsFreeGate({ onExit, children }: { onExit: () => void; children: ReactNode }) {
+  const isHandheld =
+    typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+  const [confirmed, setConfirmed] = useState(false);
+  if (!isHandheld || confirmed) return <>{children}</>;
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-7 bg-bg px-8 text-center text-text">
+      <DevicePhoneMobileIcon className="h-14 w-14 text-accent" />
+      <div className="space-y-2">
+        <h1 className="text-2xl font-bold tracking-tight">Prop your phone up</h1>
+        <p className="mx-auto max-w-xs text-muted">
+          This tracks your head through the camera, so your phone has to stay
+          still. Stand it up hands-free where it can see you, then get into
+          position.
+        </p>
+      </div>
+      <div className="flex flex-col items-center gap-3">
+        <Button variant="primary" size="md" onClick={() => setConfirmed(true)}>
+          I'm set — continue
+        </Button>
+        <Button variant="quiet" onClick={onExit}>
+          Go back
+        </Button>
+      </div>
+    </div>
   );
 }

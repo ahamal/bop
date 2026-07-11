@@ -35,14 +35,15 @@ export interface StackSnapshot {
   requestRecenter: boolean;
 }
 
-// "Hold still" gate.
-const READY_STILL_MS = 1800;
+// "Hold still" gate. Exported (with RELAX_MS) so the HUD can convert these
+// cards' 0..1 progress back into elapsed time for the tick sounds.
+export const READY_STILL_MS = 1800;
 const STILL_THRESH_DPS = 60; // deg/sec (yaw+pitch+roll) below this counts as still
 // "Relax" gate: how much near-rest time to bank before we recenter and move
 // on. Banked, not continuous: time in the bands accumulates, time outside
 // drains in real time (1×) — a blip costs what it lasts, no 2× punishment,
 // while sustained movement still empties the bank.
-const RELAX_MS = 2000;
+export const RELAX_MS = 2000;
 const RELAX_DRAIN = 1; // bank drain rate while outside the bands (× dt)
 // ...and measurably STILL while doing it, so the recenter can't capture a
 // still-settling pose as the new baseline. The rate sits above landmark
@@ -233,7 +234,12 @@ export class StackPlayer {
     switch (step.kind) {
       case "hold": {
         active = isActive(f.states, step.state);
-        if (active) this.held = Math.min(step.holdMs, this.held + dt);
+        // The timer starts only once the pose is first reached, but from then
+        // on it runs straight to completion even if the user drifts out of the
+        // pose or detection flickers — a hold that pauses/rewinds mid-count
+        // reads as the app being broken. (`active` still tracks the true pose
+        // so the marker can show when they've slipped.)
+        if (active || this.held > 0) this.held = Math.min(step.holdMs, this.held + dt);
         if (this.held >= step.holdMs) this.advance();
         break;
       }

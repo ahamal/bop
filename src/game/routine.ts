@@ -6,24 +6,28 @@
 import type { GestureName } from "../tracking/gestures.ts";
 
 export type Step =
-  // Hold still — the player settles, then we recenter (re-zero) so the following
-  // movements measure from a clean baseline. This is the ONLY step that centers.
-  | { kind: "still"; label: string }
-  // Return to a neutral head position for a beat (separates consecutive reps).
-  // `recenter` re-zeroes neutral afterwards — wanted before a ROM hold, skipped
-  // between identical reps where the baseline hasn't drifted.
-  | { kind: "relax"; label: string; recenter?: boolean }
-  // Hold a single gesture; the timer decreases only while it's held.
-  | { kind: "hold"; label: string; state: GestureName; holdMs: number }
-  // One directed half-circle pass, chin swept through the chest. dir 1 rolls
-  // left → right, −1 right → left; each pass is its own card.
-  | { kind: "roll"; label: string; dir: 1 | -1 };
+  // `pose` is the instructor-mannequin demo for this card (a track id in
+  // avatar/mannequinPoses.ts); omitted = neutral (still/relax cards).
+  { pose?: string } & (
+    // Hold still — the player settles, then we recenter (re-zero) so the following
+    // movements measure from a clean baseline. This is the ONLY step that centers.
+    | { kind: "still"; label: string }
+    // Return to a neutral head position for a beat (separates consecutive reps).
+    // `recenter` re-zeroes neutral afterwards — wanted before a ROM hold, skipped
+    // between identical reps where the baseline hasn't drifted.
+    | { kind: "relax"; label: string; recenter?: boolean }
+    // Hold a single gesture; the timer decreases only while it's held.
+    | { kind: "hold"; label: string; state: GestureName; holdMs: number }
+    // One directed half-circle pass, chin swept through the chest. dir 1 rolls
+    // left → right, −1 right → left; each pass is its own card.
+    | { kind: "roll"; label: string; dir: 1 | -1 }
+  );
 
 // Each chin tuck is its own card. Every relax re-zeroes (recenters): the tuck
 // threshold is a ~2% depth change against the calibrated neutral, so baseline
 // drift between reps would swallow it — the recenter is what keeps rep 2+
 // detectable.
-const tuck = (): Step => ({ kind: "hold", label: "Tuck your chin in", state: "tuck", holdMs: 8000 });
+const tuck = (): Step => ({ kind: "hold", label: "Tuck your chin in", state: "tuck", holdMs: 8000, pose: "chinTuck" });
 const relax = (): Step => ({ kind: "relax", label: "Relax, back to neutral", recenter: true });
 
 // Ordered easy → harder: gentle ROM holds warm the neck up, the chin tucks
@@ -33,24 +37,24 @@ export const NECK_ROUTINE: Step[] = [
   // Range-of-motion holds, each followed by a relax/re-zero. Free tilts and
   // looks first; the hand-assisted tilts (gentle overpressure is what makes
   // the tilt stretch effective) come back around once the neck is warm.
-  { kind: "hold", label: "Tilt your left ear to your shoulder", state: "tiltLeft", holdMs: 6000 },
+  { kind: "hold", label: "Tilt your left ear to your shoulder", state: "tiltLeft", holdMs: 6000, pose: "tiltLeft" },
   relax(),
-  { kind: "hold", label: "Tilt your right ear to your shoulder", state: "tiltRight", holdMs: 6000 },
+  { kind: "hold", label: "Tilt your right ear to your shoulder", state: "tiltRight", holdMs: 6000, pose: "tiltRight" },
   relax(),
-  { kind: "hold", label: "Look over your left shoulder", state: "lookLeft", holdMs: 15000 },
+  { kind: "hold", label: "Look over your left shoulder", state: "lookLeft", holdMs: 15000, pose: "lookLeft" },
   relax(),
-  { kind: "hold", label: "Look over your right shoulder", state: "lookRight", holdMs: 15000 },
+  { kind: "hold", label: "Look over your right shoulder", state: "lookRight", holdMs: 15000, pose: "lookRight" },
   relax(),
   // The look-up detail works because gesture guards are entry-only: engage the
   // tilt first, and the coupled yaw the upward gaze bleeds in can't stop the
   // timer (gestures.ts).
-  { kind: "hold", label: "Tilt left, left hand on head, right arm hanging, look slightly up", state: "tiltLeft", holdMs: 20000 },
+  { kind: "hold", label: "Tilt left, left hand on head, right arm hanging, look slightly up", state: "tiltLeft", holdMs: 20000, pose: "tiltLeftAssist" },
   relax(),
-  { kind: "hold", label: "Tilt right, right hand on head, left arm hanging, look slightly up", state: "tiltRight", holdMs: 20000 },
+  { kind: "hold", label: "Tilt right, right hand on head, left arm hanging, look slightly up", state: "tiltRight", holdMs: 20000, pose: "tiltRightAssist" },
   relax(),
-  { kind: "hold", label: "Lower your chin to your chest", state: "lookDown", holdMs: 20000 },
+  { kind: "hold", label: "Lower your chin to your chest", state: "lookDown", holdMs: 20000, pose: "chinToChest" },
   relax(),
-  { kind: "hold", label: "Gently look up", state: "lookUp", holdMs: 5000 },
+  { kind: "hold", label: "Gently look up", state: "lookUp", holdMs: 5000, pose: "lookUp" },
   relax(),
   // Chin tucks — precision/strength work, 5 reps, saved for a warmed-up neck.
   tuck(), relax(),
@@ -59,8 +63,8 @@ export const NECK_ROUTINE: Step[] = [
   tuck(), relax(),
   tuck(), relax(),
   // Flowing cooldown: one card per half-circle pass, over and back, twice.
-  { kind: "roll", label: "Slow half circle, left ear to chest to right", dir: 1 },
-  { kind: "roll", label: "And back, right ear to chest to left", dir: -1 },
-  { kind: "roll", label: "Once more, left ear to chest to right", dir: 1 },
-  { kind: "roll", label: "And back again, right ear to chest to left", dir: -1 },
+  { kind: "roll", label: "Slow half circle, left ear to chest to right", dir: 1, pose: "rollLtoR" },
+  { kind: "roll", label: "And back, right ear to chest to left", dir: -1, pose: "rollRtoL" },
+  { kind: "roll", label: "Once more, left ear to chest to right", dir: 1, pose: "rollLtoR" },
+  { kind: "roll", label: "And back again, right ear to chest to left", dir: -1, pose: "rollRtoL" },
 ];

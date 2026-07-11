@@ -2,9 +2,9 @@
 // rocks side to side on every beat; on instruction beats a move chip drops
 // down the 2D rhythm panel on the right, and when it reaches the hit slot you
 // (and the dancers — they lead, you copy) must be DOING that move: look left,
-// look right, tilt left, tilt right, or back to center. Hit enough of the
-// moves to pass; the run's 10s clock never gets to speak because the last
-// chip resolves the round on its own.
+// look right, tilt left, or tilt right. Hit enough of the moves to pass; the
+// run's 10s clock never gets to speak because the last chip resolves the round
+// on its own.
 //
 // The stage is 3D in the avatar's scene (same crystal aesthetic): two rows of
 // faceted backup dancers with a nose so their head turns read, all snapping
@@ -17,13 +17,9 @@
 //
 // Judging: moves read f.dominant — the single most-engaged gesture the
 // tracking layer already maintains — inside a ±JUDGE_MS window around the
-// chip's beat. CENTER is judged on raw head angles instead: dominant only
-// returns to "neutral" after every gesture re-arms past its exit hysteresis
-// (10° yaw / 6° roll — much tighter than the 21°/12° enters), so a
-// half-returned head still read as the old move and center chips kept
-// missing. Center = not turned and not tilted, on the two axes the game
-// uses, with its own generous tolerance. It also passes while idle, which is
-// intended: "return to center" is the rest between moves, not a trick.
+// chip's beat. There's no "return to center" chip to hit; center survives only
+// as the dancers' neutral rest pose between moves (currentMove eases them back
+// once the hold expires), never as something the player is scored on.
 
 import * as THREE from "three";
 import type { FrameResult, TrackingSession } from "../../tracking/session.ts";
@@ -31,7 +27,7 @@ import type { Level, Microgame, MicrogameDef } from "../registry.ts";
 import { playTick } from "../../audio/sfx.ts";
 import { DanceAvatar } from "./avatar.ts";
 
-type DanceMove = "lookLeft" | "lookRight" | "tiltLeft" | "tiltRight" | "center";
+type DanceMove = "lookLeft" | "lookRight" | "tiltLeft" | "tiltRight";
 
 // Per-level tempo, indexed by level-1 (the run samples tiers 1/3/5). Higher
 // levels beat faster, DROP a move on more of the beats (every 2nd by the top
@@ -45,11 +41,6 @@ const FIRST_HIT_MS = 2200; // first chip reaches the hit slot here
 const LAST_HIT_MS = 13_500; // last one, inside this game's (longer) clock
 const CLOCK_MS = 15_000; // the run is longer than the standard 10s
 const JUDGE_MS = 350; // ± window around the beat that counts as on-time
-// "Back to center" tolerance (degrees from neutral) on the axes the moves
-// use. Inside the look/tilt enter thresholds, so a centered head can't also
-// be a move, but far looser than the gestures' own exit hysteresis.
-const CENTER_YAW_DEG = 13;
-const CENTER_ROLL_DEG = 9;
 const LINGER_MS = 400; // let the last hit/miss read before resolving
 const HIT_ANIM_MS = 220; // hit chips pop and fade over this long
 
@@ -82,7 +73,6 @@ const CHIP: Record<DanceMove, { icon: string; label: string; color: string }> = 
   // the head tipped to that side instead; icon stays empty here.
   tiltLeft: { icon: "", label: "tilt left", color: "#c084fc" },
   tiltRight: { icon: "", label: "tilt right", color: "#c084fc" },
-  center: { icon: "◎", label: "center", color: "#34d399" },
 };
 // Disco: four sweeping light colors, a mirror ball, and a flashing floor —
 // all beat-driven in update(). Classic club palette (hot pink, cyan, gold,
@@ -137,24 +127,17 @@ class DanceGame implements Microgame {
     const interval = this.beatMs * DROP_EVERY[level - 1];
     this.holdMs = interval * 0.55;
 
-    // The routine: instruction beats from FIRST to LAST at the level's spacing.
-    // Low levels alternate move → center (look left, center, tilt right,
-    // center…); level 3+ draws freely with an occasional center, never
-    // repeating a move back to back. Looks and tilts from level 1 — the
-    // difficulty lives in the tempo, not the vocabulary.
+    // The routine: instruction beats from FIRST to LAST at the level's spacing,
+    // drawn freely from the four moves and never repeating one back to back.
+    // Looks and tilts from level 1 — the difficulty lives in the tempo, not the
+    // vocabulary. The dancers still recenter between chips (the hold expires
+    // before the next beat), so the rest reads without a chip to hit.
     const pool: DanceMove[] = ["lookLeft", "lookRight", "tiltLeft", "tiltRight"];
     const n = Math.floor((LAST_HIT_MS - FIRST_HIT_MS) / interval) + 1;
-    let prev: DanceMove = "center";
+    let prev: DanceMove | null = null;
     this.tokens = Array.from({ length: n }, (_, i) => {
-      let move: DanceMove;
-      if (level <= 2 && i % 2 === 1) {
-        move = "center";
-      } else if (level >= 3 && prev !== "center" && Math.random() < 0.25) {
-        move = "center";
-      } else {
-        const options = pool.filter((m) => m !== prev);
-        move = options[Math.floor(Math.random() * options.length)];
-      }
+      const options = pool.filter((m) => m !== prev);
+      const move = options[Math.floor(Math.random() * options.length)];
       prev = move;
       return { move, beatAt: FIRST_HIT_MS + i * interval, el: null, state: "pending" as const, animMs: 0 };
     });
@@ -359,8 +342,8 @@ class DanceGame implements Microgame {
     for (const d of this.dancers) {
       d.group.rotation.z = ROCK_RAD * sway * d.dir;
       d.group.position.y = d.baseY + BOUNCE * Math.abs(sway);
-      d.head.rotation.y += ((HEAD_YAW[cur] ?? 0) - d.head.rotation.y) * kHead;
-      d.head.rotation.z += ((HEAD_ROLL[cur] ?? 0) - d.head.rotation.z) * kHead;
+      d.head.rotation.y += (((cur && HEAD_YAW[cur]) ?? 0) - d.head.rotation.y) * kHead;
+      d.head.rotation.z += (((cur && HEAD_ROLL[cur]) ?? 0) - d.head.rotation.z) * kHead;
     }
 
     // Disco: the colored lights orbit the floor and flare on each beat, the
@@ -413,11 +396,7 @@ class DanceGame implements Microgame {
         }
       }
       if (tok.state === "pending") {
-        const matches =
-          tok.move === "center"
-            ? Math.abs(f.metrics.headYaw) <= CENTER_YAW_DEG &&
-              Math.abs(f.metrics.headRoll) <= CENTER_ROLL_DEG
-            : f.dominant === tok.move;
+        const matches = f.dominant === tok.move;
         if (Math.abs(dueIn) <= JUDGE_MS && matches) {
           tok.state = "hit";
           tok.animMs = HIT_ANIM_MS;
@@ -476,16 +455,17 @@ class DanceGame implements Microgame {
 
   // What the dancers are doing right now: the latest instruction whose beat
   // is landed OR imminent (they lead by DANCER_LEAD_MS — in pose right before
-  // the chip enters the slot), held for a while, then back to center.
-  private currentMove(): DanceMove {
+  // the chip enters the slot), held for a while, then back to neutral (null =
+  // the rest pose between moves).
+  private currentMove(): DanceMove | null {
     const tLead = this.t + DANCER_LEAD_MS;
     for (let i = this.tokens.length - 1; i >= 0; i--) {
       const tok = this.tokens[i];
       if (tok.beatAt <= tLead) {
-        return tLead - tok.beatAt <= this.holdMs ? tok.move : "center";
+        return tLead - tok.beatAt <= this.holdMs ? tok.move : null;
       }
     }
-    return "center";
+    return null;
   }
 }
 
@@ -511,7 +491,7 @@ export const danceDef: MicrogameDef = {
   id: "dance",
   title: "Fake It Till You Make It",
   prompt: { lead: "copy the", action: "DANCE" },
-  hint: "do the falling move when it reaches the slot · ◎ = back to center",
+  hint: "do the falling move when it reaches the slot",
   durationMs: CLOCK_MS,
   create(canvas, session, level) {
     const avatar = session.attachAvatar(canvas, DanceAvatar);
