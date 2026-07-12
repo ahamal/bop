@@ -90,7 +90,7 @@ const POSES: Record<string, Pose> = {
   // rearward, with a little extra slide on the headZ track. The head counter-
   // rotates to keep the face forward, plus a hair of chin dip (net +0.1) —
   // the "double chin".
-  chinTuck: { headZ: -0.012, neck: { x: -0.45 }, head: { x: 0.55 } },
+  chinTuck: { headZ: -0.012, neck: { x: -0.62 }, head: { x: 0.72 } },
 };
 
 // The roll's U, as a keyframe path: tilted toward one side with a little

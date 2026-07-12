@@ -53,3 +53,12 @@ still for ~1.5s while it calibrates your neutral pose, then move your head.
 
 The MediaPipe wasm + model load from CDN for now; vendor into `/public` later
 for offline use.
+
+## License
+
+The source code is [MIT licensed](LICENSE).
+
+Bundled media are **not** covered by that license and remain under their own
+terms: the music in `public/music` is from [Pixabay](https://pixabay.com/music/)
+(Pixabay Content License) and the success sound in `public/sfx` is from
+freesound.org. See the in-app Credits page for details.
